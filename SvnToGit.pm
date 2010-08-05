@@ -28,7 +28,7 @@ use warnings;
 
 use File::Basename;
 
-our $DEFAULT_AUTHORS_FILE = "~/.svn2git/authors";
+our $DEFAULT_AUTHORS_FILE = "$ENV{HOME}/.svn2git/authors";
 
 #---
 
@@ -41,13 +41,22 @@ sub convert {
 
 sub new {
   my($class, %args) = @_;
-  $args{git_repo} ||= basename($args{svn_repo});
+  unless ($args{git_repo}) {
+    $args{git_repo} = basename($args{svn_repo});
+    if (-e $args{git_repo}) {
+      $args{git_repo} .= ".git";
+    }
+  }
   $args{revision} = $args{revisions} if $args{revisions};
   $args{authors} = $args{authors_file} if $args{authors_file};
   $args{clone} = 1 unless exists $args{clone};
-  if (-f $DEFAULT_AUTHORS_FILE && (!$args{authors} || ! -f $args{authors})) {
+  if (-f $DEFAULT_AUTHORS_FILE && !$args{authors}) {
     $args{authors} = $DEFAULT_AUTHORS_FILE;
   }
+  if ($args{authors} && ! -f $args{authors}) {
+    die "The authors file you specified doesn't exist.\n"
+  }
+  $args{quiet_option} = $args{quiet} ? "--quiet" : "";
   my $self = \%args;
   bless($self, $class);
   return $self;
@@ -82,6 +91,9 @@ sub clone {
   
   $self->ensure_git_svn_present();
   
+  if ($self->{force}) {
+    $self->run_command(qw(rm -rf), $self->{git_repo});
+  }
   if (-e $self->{git_repo}) {
     die "Can't clone to '$self->{git_repo}', that directory is already present!\n";
   }
@@ -99,13 +111,13 @@ sub clone {
     }
     push @clone_opts, "-s" unless @clone_opts;
   }
-  $self->run_command(qw(git svn init --no-metadata), @clone_opts, $self->{svn_repo});
+  $self->run_command(qw(git svn init $self->{quiet_option} --no-metadata), @clone_opts, $self->{svn_repo});
   
   $self->run_command(qw(git config svn.authorsfile), $self->{authors}) if $self->{authors};
   
   my @fetch_opts;
   push @fetch_opts, "-r", $self->{revision} if $self->{revision};
-  $self->run_command(qw(git svn fetch), @fetch_opts);
+  $self->run_command(qw(git svn fetch $self->{quiet_option}), @fetch_opts);
 }
 
 sub cache_branches {
@@ -120,7 +132,7 @@ sub fix_tags {
   
   my $tags_path = $self->{tags} || 'tags/';
   $tags_path .= '/' unless $tags_path =~ m{/$};
-  my @tag_branches    = grep m{^\Q$tags_path\E}, @{$self->{remote_branches}};
+  my @tag_branches = grep m{^\Q$tags_path\E}, @{$self->{remote_branches}};
 
   for my $tag_branch (@tag_branches) {
     qx/git show-ref $tag_branch/;
@@ -138,9 +150,9 @@ sub fix_tags {
     
     my $subject = strip(`git log -l --pretty=format:'\%s' "$tag_branch"`);
     my $date = strip(`git log -l --pretty=format:'\%ci' "$tag_branch"`);
-    $self->run_command("git", "checkout", $tag_branch);
-    $self->run_command("GIT_COMMITTER_DATE='$date'", qw(git tag -a -m), $subject, $tag, $tag_branch);
-    $self->run_command(qw(git branch -d -r), $tag_branch);
+    $self->run_command(qw(git checkout $self->{quiet_option}), $tag_branch);
+    $self->run_command("GIT_COMMITTER_DATE='$date'", qw(git tag $self->{quiet_option} -a -m), $subject, $tag, $tag_branch);
+    $self->run_command(qw(git branch $self->{quiet_option} -d -r), $tag_branch);
   }
 }
 
@@ -157,8 +169,8 @@ sub fix_branches {
   for my $branch (@remote_branches) {
     next if $branch eq $trunk;
     
-    $self->run_command("git", "checkout", $branch);
-    $self->run_command("git", "checkout", "-b", $branch);
+    $self->run_command(qw(git checkout $self->{quiet_option}), $branch);
+    $self->run_command(qw(git checkout $self->{quiet_option} -b), $branch);
   }
 }
 
@@ -171,15 +183,15 @@ sub fix_trunk {
 
   print "Making sure master is trunk...\n";
 
-  $self->run_command("git", "checkout", $trunk);
-  $self->run_command(qw(git branch -D master));
-  $self->run_command(qw(git checkout -f -b master));
-  $self->run_command(qw(git branch -d -r), $trunk);
+  $self->run_command(qw(git checkout $self->{quiet_option}), $trunk);
+  $self->run_command(qw(git branch $self->{quiet_option} -D master));
+  $self->run_command(qw(git checkout $self->{quiet_option} -f -b master));
+  $self->run_command(qw(git branch $self->{quiet_option} -d -r), $trunk);
 }
 
 sub optimize_repo {
   my $self = shift;
-  $self->run_command(qw(git gc));
+  $self->run_command(qw(git gc $self->{quiet_option}));
 }
 
 #---

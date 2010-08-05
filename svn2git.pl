@@ -26,7 +26,9 @@ GetOptions(
   "clone!",
   "strip-tag-prefix:s",
   "revision|r:s",
+  "force|f",
   "verbose|v",
+  "quiet|q",
   "help|h"
 ) or pod2usage(2);
 pod2usage(1) if $opts{help};
@@ -43,7 +45,36 @@ my($svn_repo, $git_repo) = @ARGV;
 $ARGV{svn_repo} = $svn_repo;
 $ARGV{git_repo} = $git_repo;
 
-SvnToGit->convert(%ARGV);
+my $c = SvnToGit->new(%ARGV);
+$c->run;
+
+my $repo_name = $c->{git_repo};
+$repo_name =~ s/\.git$//;
+print <<EOT;
+
+----
+Conversion complete! Now ssh into your server and run something like this:
+
+su git
+cd /path/to/git/repos
+mkdir $repo_name.git
+cd $repo_name.git
+git init --bare
+# Thanks <https://kerneltrap.org/mailarchive/git/2008/10/9/3569854/thread>
+git config core.sharedrepository 1
+chmod -R o-rwx .
+chmod -R g=u .
+find . -type d | xargs chmod g+s
+
+To upload it to your server, simply run:
+
+cd $c->{git_repo}
+git remote add origin FINAL_REPO_URL
+# git config user.email YOUR_EMAIL if necessary
+# modify .gitignore & commit if necessary
+git push origin --all
+
+EOT
 
 =head1 NAME
 
@@ -51,7 +82,7 @@ svn2git - Convert a Subversion repository to Git
 
 =head1 SYNOPSIS
 
-  svn2git [OPTIONS] SVN_URL [GIT_REPO_DIR]
+  svn2git [OPTIONS] SVN_URL [NEW_REPO_DIR]
   
   OPTIONS:
     --trunk TRUNK_PATH
@@ -62,7 +93,9 @@ svn2git - Convert a Subversion repository to Git
     --revision REV_OR_REVS
     --authors AUTHORS_FILE
     --strip-tag-prefix
+    --force, -f
     --verbose, -v
+    --quiet, -q
 
 =head1 DESCRIPTION
 
@@ -124,6 +157,13 @@ L<git-svn>'s -A option for details.
 A prefix to strip off all tags.  For example,
 C<<--strip-tag-prefix=release->> would turn "release-1.2.3" into
 "1.2.3".
+
+=head3 --force
+
+=head3 -f
+
+If the directory where the new git repo will be created already exists,
+it will be overwritten.
 
 =head3 --verbose
 

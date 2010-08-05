@@ -1,16 +1,14 @@
 #!/usr/bin/env perl
 #
-# A reimplementation of James Coglan's svn2git Ruby script as a Perl
-# module and accompanying executable, adapted from
+# svn2git - A reimplementation of James Coglan's svn2git Ruby script
+# as a Perl module and accompanying executable, adapted from
 # http://github.com/schwern/svn2git by Elliot Winkler.
 #
-# This script delegates all the hard work to SvnToGit.pm (included
-# in this bundle) so see that for more.
+# This script delegates all the hard work to SvnToGit.pm
+# (included in this bundle) so see that for more.
 #
 
-use strict;
-use warnings;
-
+use Modern::Perl;
 use Getopt::Long;
 use Pod::Usage;
 use File::Basename;
@@ -22,7 +20,7 @@ my %opts;
 GetOptions(
   \%opts,
   "trunk:s", "branches:s", "tags:s", "root-is-trunk",
-  "authors:s",
+  "authors-file:s",
   "clone!",
   "strip-tag-prefix:s",
   "revision|r:s",
@@ -76,136 +74,168 @@ git push origin --all
 
 EOT
 
+__END__
+
 =head1 NAME
 
 svn2git - Convert a Subversion repository to Git
 
 =head1 SYNOPSIS
 
-  svn2git [OPTIONS] SVN_URL [NEW_REPO_DIR]
-  
-  OPTIONS:
-    --trunk TRUNK_PATH
-    --branches BRANCHES_PATH
-    --tags TAGS_PATH
-    --root-is-trunk
-    --no-clone
-    --revision REV_OR_REVS
-    --authors AUTHORS_FILE
-    --strip-tag-prefix
-    --force, -f
-    --verbose, -v
-    --quiet, -q
+B<svn2git [OPTIONS] SVN_URL [NEW_REPO_DIR]>
+
+Run C<--help> for the list of options.
 
 =head1 DESCRIPTION
 
-svn2git converts a Subversion project into a git repository.  It uses
-git-svn to do the bulk of the conversion, but does a little extra work
-to convert the Subversion way of doing things into the git way:
+svn2git converts a Subversion repository into a git repository. It
+uses git-svn to do the bulk of the conversion, but does a little extra
+work to convert the SVN way of doing things into the git way:
 
-* Subversion tag branches become git tags.
-* Local branches are made for each remote Subversion branch.
-* master is assured to be trunk.
+=over 4
 
-Once done, your new repository is ready to be used.  You can push it
-to a new remote origin like so...
+=item *
 
-  git remote add origin <git_remote_url>
+git-svn maps SVN branches to git branches, but keeps them as remotes.
+svn2git copies those to local branches so you can use them right away.
+
+=item *
+
+git-svn maps Subversion tags to git branches. svn2git creates real git
+tags instead.
+
+=item *
+
+git-svn will map trunk in your Subversion repo to an explicit branch,
+and sometimes this is not the same as what ends up being master.
+svn2git ensures that trunk maps correctly to master.
+
+=back
+
+Additionally, svn2git can handle the case in which the SVN repo you're
+converting did not start out as having a conventional
+trunk/branches/tags structure, but was moved over at a specific
+revision in the history. Read L<SvnToGit/"Converting a repo with an
+inconsistent structure"> for more information.
+
+Once done, your new repository is ready to be used. Once you're in the
+repo directory, you can push it to a new remote repository like so:
+
+  git remote add origin REMOTE_URL
   git push origin --all
   git push origin --tags
 
-=head2 Switches
+=head1 OPTIONS
 
-=head3 --trunk TRUNK_PATH
+=over 4
 
-=head3 --branches BRANCHES_PATH
+=item B<--trunk TRUNK_PATH>
 
-=head3 --tags TAGS_PATH
+=item B<--branches BRANCHES_PATH>
+
+=item B<--tags TAGS_PATH>
 
 These tell svn2git about the layout of your repository; what subdirs
-contain the trunk, branches and tags respectively.  If none are given
-a standard Subversion layout is assumed.
+contain the trunk, branches and tags respectively. If none are given a
+standard Subversion layout is assumed.
 
-=head3 --root-is-trunk
+=item B<--root-is-trunk>
 
 This tells svn2git that trunk is at 'trunk', and not to worry about
-the branches or tags (except for converting trunk to the master branch).
+the branches or tags (except for converting trunk to the master
+branch).
 
-=head3 --no-clone
+=item B<--no-clone>
 
-Skip the step of cloning the SVN repository.  This is useful when you
+Skip the step of cloning the SVN repository. This is useful when you
 just want to convert the tags on a git repository you'd previously
 cloned using git-svn. This assumes you're already in the git repo.
 
-=head3 --revision REV
+=item B<--revision REV>
 
-=head3 --revision REV1:REV2
+=item B<--revision REV1:REV2>
 
-=head3 -r REV
+=item B<-r REV>
 
-=head3 -r REV1:REV2
+=item B<-r REV1:REV2>
 
 Specifies which revision(s) to fetch, when running C<git svn fetch>.
 
-=head3 --authors AUTHORS_FILE
+=item B<--authors-file AUTHORS_FILE>
 
 The location of the authors file to use for the git-svn clone.  See
-L<git-svn>'s -A option for details.
+L<git-svn>'s C<-A> option for details.
 
-=head3 --strip-tag-prefix
+=item B<--strip-tag-prefix>
 
 A prefix to strip off all tags.  For example,
-C<<--strip-tag-prefix=release->> would turn "release-1.2.3" into
+C<--strip-tag-prefix="release-"> would turn "release-1.2.3" into
 "1.2.3".
 
-=head3 --force
+=item B<--force>
 
-=head3 -f
+=item B<-f>
 
-If the directory where the new git repo will be created already exists,
-it will be overwritten.
+If the directory where the new git repo will be created already
+exists, it will be overwritten.
 
-=head3 --verbose
+=item B<--verbose>
 
-=head3 -v
+=item B<-v>
 
 If either -v or --verbose is given, svn2git will output each command
 before it runs it.
 
+=back
+
 =head1 EXAMPLES
 
 Convert an SVN project with a standard structure, autocreating the
-'some-project' directory:
+F<some-project> directory:
 
   svn2git http://svn.example.com/some-project
-  
-Convert an SVN project that doesn't have a trunk/branches/tags setup:
+
+Convert an SVN project that doesn't have a trunk/branches/tags
+structure:
 
   svn2git http://svn.example.com/some-project --root-is-trunk
 
-Convert an SVN project with a custom path:
+Convert an SVN project into the F<some-dir> directory:
 
   svn2git http://svn.example.com/some-project some-dir
 
-Convert the tags on an existing git-svn project:
+Perform tag and trunk mapping on an existing git repo you've created
+using git-svn:
 
   cd some-git-svn-project
   svn2git --no-clone
 
 =head1 AUTHOR
 
-Michael G Schwern <schwern@pobox.com>
+Elliot Winkler <elliot.winkler@gmail.com>
 
-Modifications by Elliot Winkler <elliot.winkler@gmail.com>
+Based on code by Michael G Schwern <schwern@pobox.com>
 
 =head1 SEE ALSO
 
-L<git>, L<git-svn>
+=over 4
 
-The original Perl script:
-L<http://github.com/schwern/svn2git>
+=item *
 
-The original Ruby svn2git:
-L<http://github.com/jcoglan/svn2git/>
+L<SvnToGit>
+
+=item *
+
+L<git-svn>
+
+=item *
+
+Michael Schwern's Perl script: L<http://github.com/schwern/svn2git>
+
+=item *
+
+Current fork of Ruby svn2git: L<http://github.com/nirvdrum/svn2git>
+
+=back
 
 =cut

@@ -2,10 +2,15 @@
 
 set -e
 
-rm -rf /var/svn/svn2git-test /tmp/svn
-svnadmin create /var/svn/svn2git-test
-svn co file:///var/svn/svn2git-test /tmp/svn
-cd /tmp/svn
+fixtures_dir=$PWD/test/fixtures
+mock_remote_repo=fixtures_dir/stitch-test.svn
+mock_local_repo=fixtures_dir/stitch-test
+
+rm -rf $fixtures_dir
+
+svnadmin create $mock_remote_repo
+svn co $mock_remote_repo $mock_local_repo
+cd $mock_local_repo
 echo "Lorem ipsum dolor sit amet" > test.txt
 svn add test.txt
 svn commit -m "Initial commit"

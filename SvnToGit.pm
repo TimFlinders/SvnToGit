@@ -216,12 +216,17 @@ exists, it will be overwritten.
 
 =item B<verbosity_level =E<gt> I<Integer>>
 
-If set to 1, prints each shell command executed.
+If set to 0, nothing is output.
 
-If set to 2, outputs each shell command executed, as well as the output which that
+If set to 1 (the default), the active task will be printed to the
+console.
+
+If set to 2, the active task will be printed to the console, as well
+as each shell command before it is executed.
+
+If set to 3, the active task will be printed to the console, as well
+as each shell command before it is executed and the output which that
 command generates.
-
-Defaults to 0.
 
 =back
 
@@ -278,14 +283,15 @@ Perform optimizations on the final repo to reduce file size
 =back
 
 If converting a repo with an inconsistent structure, the process is a
-bit more complicated:
+bit more involved:
 
 =over 4
 
 =item *
 
 Use git-svn to clone the two parts of the SVN repo separately such
-there are two repos.
+there are two repos (note that the C<clone> option here has no effect
+since it's kind of pointless)
 
 =item *
 

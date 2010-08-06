@@ -135,56 +135,61 @@ repo directory, you can push it to a new remote repository like so:
 
 =item B<--tags TAGS_PATH>
 
-These tell svn2git about the layout of your repository; what subdirs
-contain the trunk, branches and tags respectively. If none are given a
-standard Subversion layout is assumed.
+These tell the converter about the layout of your repository -- what
+subdirectories contain the trunk, branches, and tags, respectively.
+
+If none of these are specified, a standard Subversion layout is
+assumed.
 
 =item B<--root-is-trunk>
 
-This tells svn2git that trunk is at 'trunk', and not to worry about
-the branches or tags (except for converting trunk to the master
+This tells the converter that trunk is at 'trunk', and not to worry
+about the branches or tags (except for converting trunk to the master
 branch).
 
 =item B<--no-clone>
 
-Skip the step of cloning the SVN repository. This is useful when you
-just want to convert the tags on a git repository you'd previously
-cloned using git-svn. This assumes you're already in the git repo.
+Skips the step of cloning the SVN repository. This is useful
+when you just want to convert the tags on a git repository you'd
+previously cloned using git-svn. Note that this assumes you're already
+in the git repo.
 
-=item B<--revision REV>
+=item B<--revision REV>, B<-r REV>
 
-=item B<--revision REV1:REV2>
+=item B<--revision REV1:REV2>, B<-r REV1:REV2>
 
-=item B<-r REV>
-
-=item B<-r REV1:REV2>
-
-Specifies which revision(s) to fetch, when running C<git svn fetch>.
+Specifies which revision(s) within the Subversion repo show up in the
+new git repo.
 
 =item B<--authors-file AUTHORS_FILE>
 
-The location of the authors file to use for the git-svn clone.  See
-L<git-svn>'s C<-A> option for details.
+The location of the authors file to use when mapping Subversion authors
+to git authors. See L<git-svn>'s C<-A> option for more on how this works.
 
 =item B<--strip-tag-prefix>
 
-A prefix to strip off all tags.  For example,
+When converting tags, removes this string from each tag. For example,
 C<--strip-tag-prefix="release-"> would turn "release-1.2.3" into
 "1.2.3".
 
-=item B<--force>
-
-=item B<-f>
+=item B<--force>, B<-f>
 
 If the directory where the new git repo will be created already
 exists, it will be overwritten.
 
-=item B<--verbose>
+=item B<--verbose>, B<-v>
 
-=item B<-v>
+Each shell command will be printed to the console before it is
+executed.
 
-If either -v or --verbose is given, svn2git will output each command
-before it runs it.
+=item B<--really-verbose>, B<-vv>
+
+Each shell command will be printed to the console before it is
+executed, as well as the output which that command generates.
+
+=item B<--quiet>, B<-q>
+
+Prevents anything from being printed to the console.
 
 =back
 

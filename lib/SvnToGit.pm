@@ -18,7 +18,7 @@ SvnToGit - Convert a Subversion repository to Git
     git_repo => "/path/to/new/git/repo",
     authors_file => "authors.txt"
   );
-  
+
 =cut
 
 package SvnToGit;
@@ -26,6 +26,12 @@ package SvnToGit;
 use Modern::Perl;
 use File::Basename;
 use Term::ANSIColor;
+use IPC::Open3 () ;
+use Symbol;
+use Data::Dumper::Again;
+use Data::Dumper::Simple;
+my $dd = Data::Dumper::Again->new(deepcopy => 1, quotekeys => 1);
+my $tdd = Data::Dumper::Again->new(deepcopy => 1, quotekeys => 1, terse => 1, indent => 0);
 
 =head1 DESCRIPTION
 
@@ -144,7 +150,7 @@ our $DEFAULT_AUTHORS_FILE = "$ENV{HOME}/.svn2git/authors";
 
 =head1 METHODS
 
-=head2 SvnToGit->convert(%args)
+=head2 SvnToGit-E<gt>convert(%args)
 
 Easy way to convert a repo all in one go. Simply passes the given
 options to L<.new>, so read that for more.
@@ -158,7 +164,7 @@ sub convert {
   return $c;
 }
 
-=head2 SvnToGit->new(%args)
+=head2 SvnToGit-E<gt>new(%args)
 
 Creates a new converter object.
 
@@ -234,29 +240,42 @@ command generates.
 
 sub new {
   my($class, %args) = @_;
-  if (!$args{svn_repo}) {
-    bail("You must pass an svn_repo option!");
-  }
-  unless ($args{git_repo}) {
-    $args{git_repo} = basename($args{svn_repo});
-    if (-e $args{git_repo} && !$args{force}) {
-      $args{git_repo} .= ".git";
-    }
-  }
-  $args{revision} = $args{revisions} if $args{revisions};
-  $args{clone} = 1 unless exists $args{clone};
-  if (-f $DEFAULT_AUTHORS_FILE && !$args{authors_file}) {
-    $args{authors_file} = $DEFAULT_AUTHORS_FILE;
-  }
-  if ($args{authors_file} && ! -f $args{authors_file}) {
-    bail("The authors file you specified doesn't exist!")
-  }
+  
   my $self = \%args;
   bless($self, $class);
+  
+  if (!$self->{svn_repo}) {
+    $self->bail("You must pass an svn_repo option!");
+  }
+  unless ($self->{git_repo}) {
+    $self->{git_repo} = basename($self->{svn_repo});
+    if (-e $self->{git_repo} && !$self->{force}) {
+      $self->{git_repo} .= ".git";
+    }
+  }
+  $self->{revision} = $self->{revisions} if $self->{revisions};
+  $self->{clone} = 1 unless exists $self->{clone};
+  if (-f $DEFAULT_AUTHORS_FILE && !$self->{authors_file}) {
+    $self->{authors_file} = $DEFAULT_AUTHORS_FILE;
+  }
+  if ($self->{authors_file} && ! -f $self->{authors_file}) {
+    $self->bail("The authors file you specified doesn't exist!")
+  }
+  # TEST ME
+  for (qw(trunk branches tags)) {
+    if ($self->{$_}) {
+      $self->{$_} =~ s{/$}{};
+    }
+  }
+  # TEST ME
+  if ($self->{strip_tag_prefix}) {
+    $self->{strip_tag_prefix} =~ s{/$}{};
+  }
+  
   return $self;
 }
 
-=head2 $converter->run
+=head2 $converter-E<gt>run
 
 If converting a normal repo (either no structure or some structure),
 the conversion process looks like this:
@@ -328,12 +347,12 @@ sub run {
   if ($self->{clone}) {
     $self->clone($self->{svn_repo}, $self->{git_repo});
   } else {
-    print "Since you requested not to clone, I'm assuming that you're already in the git repo.\n";
+    $self->info("Since you requested not to clone, I'm assuming that you're already in the git repo.");
   }
   
-  $self->cache_branches();
-  $self->fix_tags();
+  $self->cache_branches_and_tags();
   $self->fix_branches();
+  $self->fix_tags();
   $self->fix_trunk();
   $self->optimize_repo();
   chdir ".." if $self->{clone};
@@ -352,13 +371,10 @@ sub clone {
   if ($self->{force}) {
     $self->cmd(qw(rm -rf), $self->{git_repo});
   }
-  if (-e $self->{git_repo}) {
-    die "Can't clone to '$self->{git_repo}', that directory is already present!\n";
-  }
   mkdir $self->{git_repo};
   chdir $self->{git_repo};
 
-  info("Cloning SVN repo at $self->{svn_repo} into $self->{git_repo}...");
+  $self->info("Cloning SVN repo at $self->{svn_repo} into $self->{git_repo}...");
 
   my @clone_opts;
   if ($self->{root_is_trunk}) {
@@ -367,84 +383,85 @@ sub clone {
     for my $opt (qw(trunk branches tags)) {
       push @clone_opts, "--$opt=$self->{$opt}" if $self->{$opt};
     }
-    push @clone_opts, "-s" unless @clone_opts;
+    push @clone_opts, "--stdlayout" unless @clone_opts;
   }
-  $self->git(qw(svn init --no-metadata), @clone_opts, $self->{svn_repo});
+  $self->git_svn(qw(init --no-metadata), @clone_opts, $self->{svn_repo});
   
   $self->git(qw(config svn.authorsfile), $self->{authors}) if $self->{authors};
   
   my @fetch_opts;
   push @fetch_opts, "-r", $self->{revision} if $self->{revision};
-  $self->git(qw(svn fetch), @fetch_opts);
+  $self->git_svn(qw(fetch), @fetch_opts);
 }
 
-sub cache_branches {
-  my $self = shift;
-  $self->{remote_branches} = [map { strip($_) } `git branch -r`];
-}
-
-sub fix_tags {
+sub cache_branches_and_tags {
   my $self = shift;
   
-  info("Turning svn tags cloned as branches into real git tags...");
+  # Get the list of local and remote branches, taking care to ignore console color codes and ignoring the
+  # '*' character used to indicate the currently selected branch.
+  my @locals = map { s/^\*?\s+//; $_ } split("\n", `git branch -l --no-color`);
+  my @remotes = map { s/^\*?\s+//; $_ } split("\n", `git branch -r --no-color`);
   
-  my $tags_path = $self->{tags} || 'tags/';
-  $tags_path .= '/' unless $tags_path =~ m{/$};
-  my @tag_branches = grep m{^\Q$tags_path\E}, @{$self->{remote_branches}};
-
-  for my $tag_branch (@tag_branches) {
-    `git show-ref $tag_branch`;
-    if ($?) {
-      warn "'$tag_branch' is not a valid branch reference, so skipping..";
-      next;
-    }
-
-    my($tag) = $tag_branch =~ m{^\Q$tags_path\E(.*)};
-    warn "Couldn't find tag name from $tag_branch" unless length $tag;
-
-    if (my $strip = $self->{strip_tag_prefix}) {
-      $tag =~ s{^$strip}{};
-    }
-    
-    my $subject = strip(`git log -l --pretty=format:'\%s' "$tag_branch"`);
-    my $date = strip(`git log -l --pretty=format:'\%ci' "$tag_branch"`);
-    $self->git(qw(checkout), $tag_branch);
-    $self->git(qw(tag -a -m), $subject, $tag, $tag_branch, { GIT_COMMITTER_DATE => '$date' });
-    $self->git(qw(branch -d -r), $tag_branch);
+  $self->{local_branches} = \@locals;
+  
+  $self->{remote_branches} = [];
+  $self->{remote_tags} = [];
+  for (@remotes) {
+    # Tags are remote branches that (by default) start with "tags/".
+    my $tags_path = $self->tags_path;
+    my $var = m{^$tags_path/} ? "remote_tags" : "remote_branches";
+    push @{$self->{$var}}, $_;
   }
+  
+  #print Dumper($self->tags_path, $self->{remote_branches}, $self->{remote_tags});
+  #exit;
 }
 
 sub fix_branches {
   my $self = shift;
   
-  info("Checking out remote branches as local branches...");
-  
-  my $tags_path = $self->{tags} || 'tags/';
-  $tags_path .= '/' unless $tags_path =~ m{/$};
-  my @remote_branches = grep !m{^\Q$tags_path}, @{$self->{remote_branches}};
+  $self->info("Checking out remote branches as local branches...");
 
-  my $trunk = $self->{trunk} || "trunk";
-  for my $branch (@remote_branches) {
-    next if $branch eq $trunk;
-    
+  for my $branch (@{$self->{remote_branches}}) {
+    next if $branch eq $self->trunk_path;
+    $self->git(qw(branch -t), $branch, "remotes/$branch");
     $self->git(qw(checkout), $branch);
-    $self->git(qw(checkout -b), $branch);
+  }
+}
+
+sub fix_tags {
+  my $self = shift;
+  
+  $self->info("Turning svn tags cloned as branches into real git tags...");
+
+  my $tags_path = $self->tags_path;
+  for my $tag_branch (@{$self->{remote_tags}}) {
+    (my $tag = $tag_branch) =~ s{^$tags_path/}{};
+    my $newtag = $tag;
+
+    if (my $prefix = $self->{strip_tag_prefix}) {
+      $newtag =~ s{^$prefix/}{};
+    }
+    
+    my $subject = $self->strip(`git log -l --pretty=format:'\%s' "$tag_branch"`);
+    my $date = $self->strip(`git log -l --pretty=format:'\%ci' "$tag_branch"`);
+    #$self->git(qw(checkout), $tag_branch);
+    $self->git(qw(tag -a -m), $subject, $newtag, $tag_branch, {env => {GIT_COMMITTER_DATE => $date}});
+    $self->git(qw(branch -d -r), $tag_branch);
   }
 }
 
 sub fix_trunk {
   my $self = shift;
   
-  my $trunk = $self->{trunk} || "trunk";
+  return unless grep { $_ eq $self->trunk_path } @{$self->{remote_branches}};
 
-  return unless grep /^\s*\Q$trunk\E\s*/, @{$self->{remote_branches}};
+  $self->info("Making sure master is trunk...");
 
-  info("Making sure master is trunk...");
-
-  $self->git(qw(checkout), $trunk);
+  $self->git(qw(checkout), $self->trunk_path);
   $self->git(qw(branch -D master));
   $self->git(qw(checkout -f -b master));
-  $self->git(qw(branch -d -r), $trunk);
+  $self->git(qw(branch -d -r), $self->trunk_path);
 }
 
 sub optimize_repo {
@@ -455,7 +472,7 @@ sub optimize_repo {
 #---
 
 sub ensure_git_present {
-  my $self = shift;
+  my $class = shift;
   `git --version`;
   die "git --version didn't work.  Is git installed?\n" if $?;
 }
@@ -466,34 +483,106 @@ sub ensure_git_svn_present {
   die "git help svn didn't work.  Is git-svn installed?\n" if $?;
 }
 
+sub trunk_path {
+  my $self = shift;
+  $self->{trunk} || 'trunk';
+}
+
+sub branches_path {
+  my $self = shift;
+  $self->{branches} || 'branches';
+}
+
+sub tags_path {
+  my $self = shift;
+  $self->{tags} || 'tags';
+}
+
 sub cmd {
   my($self, @cmd) = @_;
   
-  if (ref $cmd[-1] eq "HASH") {
-    my $env = pop @cmd;
-    my @tmp = "";
-    for (my($k,$v) = %$env) {
-      push @tmp, "$k=\"$v\"";
-    }
-    unshift @cmd, join(" ", @tmp);
+  my $opts = (ref $cmd[-1] eq "HASH") ? pop @cmd : {};
+  my %OLDENV = ();
+  
+  #if (ref $cmd[-1] eq "HASH") {
+  #  my $env = pop @cmd;
+  #  my @tmp = ();
+  #  while (my($k,$v) = each %$env) {
+  #    push @tmp, "$k=\"$v\"";
+  #  }
+  #  my $pre = join(" ", @tmp);
+  #  $cmd[0] = $pre . " " . $cmd[0];
+  #}
+  
+  for my $k (keys %{$opts->{env}}) {
+    $OLDENV{$k} = $ENV{$k};
+    $ENV{$k} = $opts->{env}->{$k};
   }
   
-  print colored("@_\n", "yellow") if $self->{verbosity_level} > 0;
-  system @_;
+  if ($self->{verbosity_level} >= 2) {
+    say colored(join(" ", map { /[ ]/ ? $tdd->dump($_) : $_ } @cmd), "yellow");
+    say colored("   with env vars: ".$tdd->dump($opts->{env}), "yellow");
+  }
+  
+  # Stolen from Git::Wrapper
+  my (@out, @err, $wtr, $rdr, $err);
+  $err = Symbol::gensym;
+  my $pid = IPC::Open3::open3($wtr, $rdr, $err, @cmd);
+  close $wtr;
+  while (defined(my $x = <$rdr>) | defined(my $y = <$err>)) {
+    if (defined $x) {
+      chomp $x;
+      say $x if $self->{verbosity_level} >= 3;
+      push @out, $x;
+    }
+    if (defined $y) {
+      chomp $y;
+      say $y if $self->{verbosity_level} >= 3;
+      push @err, $y;
+    }
+  }
+  waitpid $pid, 0;
+  
+  for my $k (keys %OLDENV) {
+    $ENV{$k} = $OLDENV{$k};
+  }
 
   my $exit = $? >> 8;
-  die "@_ exited with $exit" if $exit;
+  die "@cmd exited with $exit" if $exit;
 
-  return 1;
+  return @out;
 }
 
 sub git {
   my($self, $subcommand, @args) = @_;
   
-  unshift @args, "--quiet" if $self->{verbosity_level} > 1;
+  #my $quiet_option = "";
+  #given ($subcommand) {
+  #  when("tag")  { $quiet_option = undef }
+  #  #when("fetch") { $quiet_option = "-q" }
+  #  default       { $quiet_option = "--quiet" }
+  #}
+  #unshift @args, $quiet_option if $quiet_option && $self->{verbosity_level} < 3;
+  
   my @cmd = ("git", $subcommand, @args);
   
-  cmd(@cmd);
+  $self->cmd(@cmd);
+}
+
+sub git_svn {
+  my($self, $subcommand, @args) = @_;
+  
+  #my $quiet_option = "";
+  #given ($subcommand) {
+  #  when("init")  { $quiet_option = undef }
+  #  when("fetch") { $quiet_option = "-q" }
+  #  default       { $quiet_option = "--quiet" }
+  #}
+  #unshift @args, $quiet_option if $quiet_option && $self->{verbosity_level} < 3;
+  
+  my @cmd = ("git", "svn", $subcommand, @args);
+  
+  $self->cmd(@cmd);
 }
 
 sub header {
@@ -503,19 +592,19 @@ sub header {
 
 sub info {
   my($self, $msg) = @_;
-  print colored("$msg\n", "green");
+  print colored("$msg\n", "green") if $self->{verbosity_level} > 0;
 }
 
-# don't need to get self here, since this is kind of a private method
 sub strip {
-  local $_ = shift;
-  s/^\s+//; s/\s+$//;
-  return $_;
+  my($self, $str) = @_;
+  $str =~ s/^\s+//;
+  $str =~ s/\s+$//;
+  return $str;
 }
 
-# don't need to get self here, since this is kind of a private method
 sub bail {
-  die "SvnToGit: @_\n";
+  my ($self, @args) = @_;
+  die "SvnToGit: @args\n";
 }
 
 1;
@@ -561,5 +650,9 @@ Added default authors file in F<~/.svn2git/authors>
 Added a way to convert a SVN repo did not start out as having a
 conventional trunk/branches/tags structure but was moved over at a
 specific revision in the history.
+
+=item *
+
+Added --force option
 
 =cut

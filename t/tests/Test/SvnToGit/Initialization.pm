@@ -1,13 +1,11 @@
 #!/usr/bin/perl
 
-package Test::SvnToGit;
+package Test::SvnToGit::Initialization;
 
-use lib qw(../ ../../../lib);
+use lib qw(../.. ../../../../lib);
 use Modern::Perl;
 use Test::Most;
 use base 'Test::Class';
-use File::Spec;
-#use File::HomeDir;
 # If multiple tests in a test method and one dies, exit whole method
 #BEGIN { $ENV{DIE_ON_FAIL} = 1 }
 #use Test::MockObject;
@@ -41,8 +39,6 @@ sub convert : Tests {
   $klass->called_ok('new', {foo => "bar", baz => "quux"})
 }
 =cut
-
-my $fixture_dir = File::Spec->rel2abs("../../fixtures/normal_test1");
 
 sub startup : Tests(startup => 1) {
   my $test = shift;

@@ -13,18 +13,19 @@ use Getopt::Long;
 use Pod::Usage;
 use File::Basename;
 
-use lib dirname(__FILE__);
+use lib dirname(__FILE__) . "/../lib";
 use SvnToGit;
 
 my %opts;
 GetOptions(
   \%opts,
   "trunk:s", "branches:s", "tags:s", "root-is-trunk",
-  "authors-file:s",
+  "authors-file|A:s",
   "clone!",
   "strip-tag-prefix:s",
   "revision|r:s",
   "force|f",
+  "really-verbose|v",
   "verbose|v",
   "quiet|q",
   "help|h"
@@ -43,8 +44,17 @@ my($svn_repo, $git_repo) = @ARGV;
 $ARGV{svn_repo} = $svn_repo;
 $ARGV{git_repo} = $git_repo;
 
-my $c = SvnToGit->new(%ARGV);
-$c->run;
+if ($ARGV{quiet}) {
+  $ARGV{verbosity_level} = 0;
+} elsif ($ARGV{verbose}) {
+  $ARGV{verbosity_level} = 2;
+} elsif ($ARGV{really_verbose}) {
+  $ARGV{verbosity_level} = 3;
+} else {
+  $ARGV{verbosity_level} = 1;
+}
+
+my $c = SvnToGit->convert(%ARGV);
 
 my $repo_name = $c->{git_repo};
 $repo_name =~ s/\.git$//;

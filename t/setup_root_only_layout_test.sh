@@ -5,7 +5,7 @@ set -e
 this_script=$(readlink -f $0)
 this_dir=`dirname $this_script`
 fixtures_dir=$this_dir/fixtures
-fixture_dir=$fixtures_dir/trunk_only_layout
+fixture_dir=$fixtures_dir/root_only_layout
 mock_remote_repo=$fixture_dir/repo
 mock_local_repo=$fixture_dir/wc
 

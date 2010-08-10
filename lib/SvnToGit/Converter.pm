@@ -96,12 +96,12 @@ to contain only revisions 3-32 of the SVN repo:
 
 =head2 Converting a repo with no trunk/branches/tags structure
 
-Use the C<root_is_trunk> option.
+Use the C<root_only> option.
 
   SvnToGit::Converter->convert(
     svn_repo => "svn://your/svn/repo",
     git_repo => "/path/to/new/git/repo"
-    root_is_trunk => 1
+    root_only => 1
   );
 
 =head2 Converting a repo with an inconsistent structure
@@ -115,31 +115,31 @@ a branch. Unfortunately, if you were to convert such a project with
 git-svn, you would lose some history as the repository you'd end up
 with would stop at the point where trunk first came into existence.
 
-This is where SvnToGit::Converter can help you. The way SvnToGit
+This is where SvnToGit::Converter can help you. The way SvnToGit::Converter
 converts such a repository is that the portion of the history up to
 the revision in which trunk was introduced is copied to one
 repository, and everything onward is copied as a second repository.
 Then, the two repositories are stitched together in the end.
 
-So, simply use the C<trunk_begins_at> option to tell the converter
+So, simply use the C<start_std_layout_at> option to tell the converter
 where trunk was introduced:
 
   SvnToGit::Converter->convert(
     svn_repo => "svn://your/svn/repo",
     git_repo => "/path/to/new/git/repo",
-    trunk_begins_at => 5,
+    start_std_layout_at => 5,
   );
 
 If it took a few revisions to move to the trunk/branches/tags layout
 and you wish to remove some revisions from the final repository,
-you can specify the C<root_is_trunk_until> option to specify an
+you can specify the C<end_root_only_at> option to specify an
 endpoint for the first repository:
 
   SvnToGit::Converter->convert(
     svn_repo => "svn://your/svn/repo",
     git_repo => "/path/to/new/git/repo",
-    root_is_trunk_until => 30
-    trunk_begins_at => 33
+    end_root_only_at => 30
+    start_std_layout_at => 33
   );
 
 =head1 OPTIONS
@@ -158,18 +158,14 @@ options to L<.new>, so read that for more.
 
 sub convert {
   my($class, %args) = @_;
-  my $c = $class->new(%args);
+  my $c = $class->get_converter(%args);
   $c->run;
   return $c;
 }
 
-=head2 SvnToGit::Converter-E<gt>new(%args)
+=head2 SvnToGit::Converter-E<gt>get_converter(%args)
 
 Base method to create a new converter object.
-
-L<SvnToGit::StandardLayoutConverter> and
-L<SvnToGit::InconsistentLayoutConverter> extend this method, so see
-them for more.
 
 Receives the following options:
 
@@ -187,7 +183,7 @@ subdirectories contain the trunk, branches, and tags, respectively.
 If none of these are specified, a standard Subversion layout is
 assumed.
 
-=item B<root_is_trunk =E<gt> I<Boolean>>
+=item B<root-only =E<gt> I<Boolean>>
 
 This tells the converter that trunk is at 'trunk', and not to worry
 about the branches or tags (except for converting trunk to the master
@@ -239,12 +235,16 @@ command generates.
 
 =back
 
+Returns an InconsistentLayoutConverter if start_std_layout_at was given.
+
+Otherwise, returns a ConsistentLayoutConverter.
+
 =cut
 
-sub new {
+sub get_converter {
   my($class, %data) = @_;
   
-  my $subclass = "SvnToGit::" . ($data{trunk_begins_at} ? 'InconsistentLayoutConverter' : 'ConsistentLayoutConverter');
+  my $subclass = "SvnToGit::" . ($data{start_std_layout_at} ? 'InconsistentLayoutConverter' : 'ConsistentLayoutConverter');
   #eval "require $klass";
   $subclass->new(%data);
 }
@@ -527,6 +527,10 @@ specific revision in the history.
 =item *
 
 Added --force option
+
+=item *
+
+Renamed --root-is-trunk to --root-only
 
 =head1 AUTHOR
 

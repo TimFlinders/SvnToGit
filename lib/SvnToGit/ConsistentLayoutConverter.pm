@@ -143,7 +143,7 @@ sub clone {
   $self->info("Cloning SVN repo at $self->{svn_repo} into $self->{git_repo}...");
 
   my @clone_opts;
-  if ($self->{root_is_trunk}) {
+  if ($self->{root_only}) {
     push @clone_opts, "--trunk=".$self->{svn_repo};
   } else {
     for my $opt (qw(trunk branches tags)) {

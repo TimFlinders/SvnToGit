@@ -19,14 +19,14 @@ use SvnToGit;
 my %opts;
 GetOptions(
   \%opts,
-  "trunk:s", "branches:s", "tags:s", "root-is-trunk",
+  "trunk:s", "branches:s", "tags:s", "root-only",
   "authors-file|A:s",
   "clone!",
   "strip-tag-prefix:s",
   "revision|r:s",
   "grafts-file=s",
-  "root-is-trunk-until=i",
-  "trunk-begins-at=i",
+  "end-root-only-at=i",
+  "start-std-layout-at=i",
   "clear-cache",
   "force|f",
   "really-verbose|v",
@@ -57,7 +57,7 @@ if ($opts{quiet}) {
   $opts{verbosity_level} = 3;
 }
 
-my $c = SvnToGit->convert(%ARGV);
+my $c = SvnToGit::Converter->convert(%ARGV);
 
 my $repo_name = $c->{git_repo};
 $repo_name =~ s/\.git$//;
@@ -154,7 +154,7 @@ subdirectories contain the trunk, branches, and tags, respectively.
 If none of these are specified, a standard Subversion layout is
 assumed.
 
-=item B<--root-is-trunk>
+=item B<root-only>
 
 This tells the converter that trunk is at 'trunk', and not to worry
 about the branches or tags (except for converting trunk to the master

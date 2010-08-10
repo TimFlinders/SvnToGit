@@ -1,6 +1,6 @@
 #!/usr/bin/perl
 
-package Test::SvnToGit::TrunkOnlyLayout;
+package Test::SvnToGit::RootOnlyLayout;
 
 use lib qw(../../../../lib);
 use Modern::Perl;
@@ -12,7 +12,7 @@ use Cwd qw(fast_abs_path);
 use Data::Dumper::Simple;
 
 my $fixtures_dir = fast_abs_path(dirname(__FILE__) . "/../../../fixtures");
-my $fixture_dir = "$fixtures_dir/trunk_only_layout";
+my $fixture_dir = "$fixtures_dir/root_only_layout";
 
 sub startup : Tests(startup => 1) {
   my $test = shift;

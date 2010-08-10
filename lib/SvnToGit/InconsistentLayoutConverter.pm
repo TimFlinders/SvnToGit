@@ -29,7 +29,7 @@ sub buildargs {
   
   %data = $class->SUPER::buildargs(%data);
 
-  $data{root_is_trunk_until} ||= $data{trunk_begins_at} - 1;
+  $data{end_root_only_at} ||= $data{start_std_layout_at} - 1;
   
   $data{final_git_url} ||= 'ssh://you@yourserver.com/path/to/git/repo';
   if ($data{grafts_file}) {
@@ -127,8 +127,8 @@ sub clone_halves {
     svn_repo => $self->{svn_repo},
     git_repo => $self->{cached_pre_repo_path},
     authors => $self->{authors},
-    root_is_trunk => 1,
-    revision => join(":", 1, $self->{root_is_trunk_until}),
+    root_only => 1,
+    revision => join(":", 1, $self->{end_root_only_at}),
     force => 1,
     verbosity_level => $self->{verbosity_level}
   );
@@ -139,7 +139,7 @@ sub clone_halves {
     svn_repo => $self->{svn_repo},
     git_repo => $self->{cached_post_repo_path},
     authors => $self->{authors},
-    revision => join(":", $self->{trunk_begins_at}, "HEAD"),
+    revision => join(":", $self->{start_std_layout_at}, "HEAD"),
     force => 1,
     verbosity_level => $self->{verbosity_level}
   );

@@ -1,28 +1,21 @@
 #!/usr/bin/perl
 
-package Test::SvnToGit::StandardLayout;
+package Test::SvnToGit::Converter::ConsistentLayout::StandardLayout;
 
-use lib qw(../../../../lib);
 use Modern::Perl;
 use Test::Most;
-use parent 'Test::Class';
 use File::Spec;
 use File::Basename;
 use Cwd qw(fast_abs_path);
 use Data::Dumper::Simple;
 
-my $fixtures_dir = fast_abs_path(dirname(__FILE__) . "/../../../fixtures");
-my $fixture_dir = "$fixtures_dir/standard_layout";
+use parent 'Test::SvnToGit::Class';
 
-sub startup : Tests(startup => 1) {
-  my $test = shift;
-  # require our class and make sure that works at the same time
-  use_ok 'SvnToGit::Converter';
-}
+my $fixtures_dir = fast_abs_path(dirname(__FILE__) . "/../../../../../fixtures");
+my $fixture_dir = "$fixtures_dir/standard_layout";
 
 sub setup : Test(setup) {
   my $test = shift;
-  # go ahead and convert the repo
   $test->{converter} = SvnToGit::Converter->get_converter(
     svn_repo => "file://$fixture_dir/repo",
     git_repo => "$fixture_dir/repo.git",

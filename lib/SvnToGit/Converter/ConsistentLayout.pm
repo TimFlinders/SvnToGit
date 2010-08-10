@@ -1,6 +1,6 @@
 #!/usr/bin/env perl
 
-package SvnToGit::ConsistentLayoutConverter;
+package SvnToGit::Converter::ConsistentLayout;
 
 # Need to re-use all these modules?
 use Modern::Perl;
@@ -28,19 +28,13 @@ sub buildargs {
   
   $data{clone} = 1 unless exists $data{clone};
   $data{revision} = $data{revisions} if $data{revisions};
-  if (-f $class->default_authors_file && !$data{authors_file}) {
-    $data{authors_file} = $class->default_authors_file;
-  }
-  if ($data{authors_file} && ! -f $data{authors_file}) {
-    $class->bail("The authors file you specified doesn't exist!")
-  }
-  # TEST ME
+  
   for (qw(trunk branches tags)) {
     if ($data{$_}) {
       $data{$_} =~ s{/$}{};
     }
   }
-  # TEST ME
+  
   if ($data{strip_tag_prefix}) {
     $data{strip_tag_prefix} =~ s{/$}{};
   }

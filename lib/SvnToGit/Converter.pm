@@ -32,8 +32,8 @@ my $tdd = Data::Dumper::Again->new(deepcopy => 1, quotekeys => 1, terse => 1, in
 
 #use lib dirname(__FILE__) . "/..";
 
-use SvnToGit::ConsistentLayoutConverter;
-use SvnToGit::InconsistentLayoutConverter;
+use SvnToGit::Converter::ConsistentLayout;
+use SvnToGit::Converter::InconsistentLayout;
 
 =head1 DESCRIPTION
 
@@ -235,22 +235,22 @@ command generates.
 
 =back
 
-Returns an InconsistentLayoutConverter if start_std_layout_at was given.
+Returns an Converter::InconsistentLayout if start_std_layout_at was given.
 
-Otherwise, returns a ConsistentLayoutConverter.
+Otherwise, returns a Converter::ConsistentLayout.
 
 =cut
 
 sub get_converter {
   my($class, %data) = @_;
   
-  my $subclass = "SvnToGit::" . ($data{start_std_layout_at} ? 'InconsistentLayoutConverter' : 'ConsistentLayoutConverter');
+  my $subclass = 'SvnToGit::Converter::' . ($data{start_std_layout_at} ? 'InconsistentLayout' : 'ConsistentLayout');
   #eval "require $klass";
   $subclass->new(%data);
 }
 
 # Not documented.
-# This is used by ->new and ConsistentLayoutConverter->new,
+# This is used by ->new and Converter::ConsistentLayout->new,
 # so use that instead.
 #
 sub buildargs {
@@ -259,6 +259,7 @@ sub buildargs {
   if (!$data{svn_repo}) {
     $class->bail("You must pass an svn_repo option!");
   }
+  
   unless ($data{git_repo}) {
     $data{git_repo} = basename($data{svn_repo});
     if (-e $data{git_repo} && !$data{force}) {
@@ -266,6 +267,13 @@ sub buildargs {
     }
   }
   $data{git_repo} = rel2abs($data{git_repo});
+  
+  if (-f $class->default_authors_file && !$data{authors_file}) {
+    $data{authors_file} = $class->default_authors_file;
+  }
+  if ($data{authors_file} && ! -f $data{authors_file}) {
+    $class->bail("The authors file you specified doesn't exist!")
+  }
   
   $data{verbosity_level} //= 1;
   

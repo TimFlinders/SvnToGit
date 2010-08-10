@@ -1,6 +1,6 @@
 #!/usr/bin/env perl
 
-package SvnToGit::InconsistentLayoutConverter;
+package SvnToGit::Converter::InconsistentLayout;
 
 # Need to re-use all these modules?
 use Modern::Perl;
@@ -32,12 +32,14 @@ sub buildargs {
   $data{end_root_only_at} ||= $data{start_std_layout_at} - 1;
   
   $data{final_git_url} ||= 'ssh://you@yourserver.com/path/to/git/repo';
+  
   if ($data{grafts_file}) {
     $data{grafts_file} = rel2abs($data{grafts_file}) unless file_name_is_absolute($data{grafts_file});
   } else {
     $data{stop_at_grafting} = 1;
   }
   
+  # These probably shouldn't be here, but whatever.
   $data{cached_pre_repo_path} = "/tmp/git.pre.cached";
   $data{cached_post_repo_path} = "/tmp/git.post.cached";
   $data{pre_repo_path} = "/tmp/git.pre";
@@ -123,7 +125,7 @@ sub clone_halves {
   
   $self->ensure_git_svn_present();
   
-  $self->{pre_repo} = SvnToGit::ConsistentLayoutConverter->new(
+  $self->{pre_repo} = SvnToGit::Converter::ConsistentLayout->new(
     svn_repo => $self->{svn_repo},
     git_repo => $self->{cached_pre_repo_path},
     authors => $self->{authors},
@@ -135,7 +137,7 @@ sub clone_halves {
   $self->{pre_repo}->clone();
   $self->{pre_repo}->fix_branches_and_tags();
   
-  $self->{post_repo} = SvnToGit::ConsistentLayoutConverter->new(
+  $self->{post_repo} = SvnToGit::Converter::ConsistentLayout->new(
     svn_repo => $self->{svn_repo},
     git_repo => $self->{cached_post_repo_path},
     authors => $self->{authors},

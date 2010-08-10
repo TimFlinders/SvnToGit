@@ -1,25 +1,18 @@
 #!/usr/bin/perl
 
-package Test::SvnToGit::InconsistentLayoutWithGap;
+package Test::SvnToGit::Converter::InconsistentLayout::WithGap;
 
 use Modern::Perl;
 use Test::Most;
-use parent 'Test::Class';
 use Cwd qw(getcwd fast_abs_path);
 use File::Basename;
 use Cwd qw(fast_abs_path);
 use Data::Dumper::Simple;
 
-use lib fast_abs_path(dirname(__FILE__) . "/../../../../lib");
+use parent 'Test::SvnToGit::Class';
 
-my $fixtures_dir = fast_abs_path(dirname(__FILE__) . "/../../../fixtures");
+my $fixtures_dir = fast_abs_path(dirname(__FILE__) . "/../../../../../fixtures");
 my $fixture_dir = "$fixtures_dir/inconsistent_layout_with_gap";
-
-sub startup : Tests(startup => 1) {
-  my $test = shift;
-  # require our class and make sure that works at the same time
-  use_ok 'SvnToGit::Converter';
-}
 
 sub setup : Test(setup) {
   my $test = shift;

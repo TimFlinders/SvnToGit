@@ -23,7 +23,7 @@ sub startup : Tests(startup => 1) {
 sub setup : Test(setup) {
   my $test = shift;
   # go ahead and convert the repo
-  $test->{converter} = SvnToGit::Converter->new(
+  $test->{converter} = SvnToGit::Converter->get_converter(
     svn_repo => "file://$fixture_dir/repo",
     git_repo => "$fixture_dir/repo.git",
     force => 1,

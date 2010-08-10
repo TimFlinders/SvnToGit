@@ -23,10 +23,10 @@ sub startup : Tests(startup => 1) {
 
 sub setup : Test(setup) {
   my $test = shift;
-  $test->{converter} = SvnToGit::Converter->new(
+  $test->{converter} = SvnToGit::Converter->get_converter(
     svn_repo => "file://$fixture_dir/repo",
     git_repo => "$fixture_dir/repo.git",
-    trunk_begins_at => 4,
+    start_std_layout_at => 4,
     verbosity_level => $ENV{VERBOSITY} // 0,
     clear_cache => 1,
     grafts_file => "$fixture_dir/grafts.txt"

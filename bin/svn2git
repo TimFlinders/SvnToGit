@@ -24,6 +24,10 @@ GetOptions(
   "clone!",
   "strip-tag-prefix:s",
   "revision|r:s",
+  "grafts-file=s",
+  "root-is-trunk-until=i",
+  "trunk-begins-at=i",
+  "clear-cache",
   "force|f",
   "really-verbose|v",
   "verbose|v",
@@ -32,26 +36,25 @@ GetOptions(
 ) or pod2usage(2);
 pod2usage(1) if $opts{help};
 
-# convert --foo-bar to $ARGV{foo_bar}
+# convert --foo-bar to $opts{foo_bar}
 for my $k (keys %opts) {
   my $v = $opts{$k};
-  $k =~ s/-/_/g;
-  $ARGV{$k} = $v;
+  (my $nk = $k) =~ s/-/_/g;
+  delete $opts{$k};
+  $opts{$nk} = $v;
 }
 
 pod2usage(2) if @ARGV == 0;
 my($svn_repo, $git_repo) = @ARGV;
-$ARGV{svn_repo} = $svn_repo;
-$ARGV{git_repo} = $git_repo;
+$opts{svn_repo} = $svn_repo;
+$opts{git_repo} = $git_repo;
 
-if ($ARGV{quiet}) {
-  $ARGV{verbosity_level} = 0;
-} elsif ($ARGV{verbose}) {
-  $ARGV{verbosity_level} = 2;
-} elsif ($ARGV{really_verbose}) {
-  $ARGV{verbosity_level} = 3;
-} else {
-  $ARGV{verbosity_level} = 1;
+if ($opts{quiet}) {
+  $opts{verbosity_level} = 0;
+} elsif ($opts{verbose}) {
+  $opts{verbosity_level} = 2;
+} elsif ($opts{really_verbose}) {
+  $opts{verbosity_level} = 3;
 }
 
 my $c = SvnToGit->convert(%ARGV);
@@ -229,7 +232,7 @@ using git-svn:
 
 Elliot Winkler <elliot.winkler@gmail.com>
 
-Based on code by Michael G Schwern <schwern@pobox.com>
+Greatly adapted from code by Michael G Schwern <schwern@pobox.com>
 
 =head1 SEE ALSO
 

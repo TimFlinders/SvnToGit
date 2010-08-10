@@ -2,16 +2,14 @@
 
 package Test::SvnToGit::TrunkOnlyLayout;
 
-use lib qw(../.. ../../../../lib);
+use lib qw(../../../../lib);
 use Modern::Perl;
 use Test::Most;
-use base 'Test::Class';
+use parent 'Test::Class';
 use File::Spec;
 use File::Basename;
 use Cwd qw(fast_abs_path);
 use Data::Dumper::Simple;
-
-our $CLASS = 'SvnToGit';
 
 my $fixtures_dir = fast_abs_path(dirname(__FILE__) . "/../../../fixtures");
 my $fixture_dir = "$fixtures_dir/trunk_only_layout";
@@ -19,13 +17,13 @@ my $fixture_dir = "$fixtures_dir/trunk_only_layout";
 sub startup : Tests(startup => 1) {
   my $test = shift;
   # require our class and make sure that works at the same time
-  use_ok $CLASS;
+  use_ok 'SvnToGit::Converter';
 }
 
 sub setup : Test(setup) {
   my $test = shift;
   # go ahead and convert the repo
-  $test->{converter} = SvnToGit->new(
+  $test->{converter} = SvnToGit::Converter->new(
     svn_repo => "file://$fixture_dir/repo",
     git_repo => "$fixture_dir/repo.git",
     force => 1,

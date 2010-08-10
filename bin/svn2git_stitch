@@ -102,8 +102,8 @@ sub process_command_line {
   GetOptions(
     \%opts,
     "grafts-file=s",
-    "end-of-old-structure=i",
-    "start-of-new-structure=i",
+    "root-is-trunk-until=i",
+    "trunk-begins-at=i",
     "authors-file|authors=s",
     "final-git-url=s",
     "clear-cache",
@@ -315,8 +315,8 @@ sub cleanup {
   header "Cleaning up";
   run qw(git remote rm origin);
   run qw(git remote add origin), $ARGV{final_git_url};
-  run qw(git gc $ARGV{quiet_option});
-  run qw(git repack $ARGV{quiet_option} -a -d -f --depth 50 --window 50);
+  run qw(git gc);
+  run qw(git repack -a -d -f --depth 50 --window 50);
 }
 
 #---

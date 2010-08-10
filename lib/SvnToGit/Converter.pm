@@ -1,19 +1,16 @@
 #!/usr/bin/env perl
-#
-# svn2git - A reimplementation of James Coglan's svn2git Ruby script
-# as a Perl module and accompanying executable, adapted from
-# http://github.com/schwern/svn2git by Elliot Winkler.
-#
+
+package SvnToGit::Converter;
 
 =head1 NAME
 
-SvnToGit - Convert a Subversion repository to Git
+SvnToGit::Converter - Convert a Subversion repository to Git
 
 =head1 SYNOPSIS
 
-  use SvnToGit;
+  use SvnToGit::Converter;
 
-  SvnToGit->convert(
+  SvnToGit::Converter->convert(
     svn_repo => "svn://your/svn/repo",
     git_repo => "/path/to/new/git/repo",
     authors_file => "authors.txt"
@@ -21,10 +18,10 @@ SvnToGit - Convert a Subversion repository to Git
 
 =cut
 
-package SvnToGit;
-
 use Modern::Perl;
 use File::Basename;
+use File::Spec::Functions qw(rel2abs);
+use Cwd;
 use Term::ANSIColor;
 use IPC::Open3 () ;
 use Symbol;
@@ -33,49 +30,55 @@ use Data::Dumper::Simple;
 my $dd = Data::Dumper::Again->new(deepcopy => 1, quotekeys => 1);
 my $tdd = Data::Dumper::Again->new(deepcopy => 1, quotekeys => 1, terse => 1, indent => 0);
 
+#use lib dirname(__FILE__) . "/..";
+
+use SvnToGit::ConsistentLayoutConverter;
+use SvnToGit::InconsistentLayoutConverter;
+
 =head1 DESCRIPTION
 
-SvnToGit is a class to encapsulate converting a Subversion repository
-into a git repository. It makes system calls to git-svn to do the bulk
-of the conversion, doing a little extra work to convert the SVN way of
-doing things into the git way:
+SvnToGit::Converter is a class to encapsulate converting a Subversion
+repository into a git repository. It makes system calls to git-svn to
+do the bulk of the conversion, doing a little extra work to convert
+the SVN way of doing things into the git way:
 
 =over 4
 
 =item *
 
 git-svn maps SVN branches to git branches, but keeps them as remotes.
-SvnToGit copies those to local branches so you can use them right
-away.
+SvnToGit::Converter copies those to local branches so you can use them
+right away.
 
 =item *
 
-git-svn maps Subversion tags to git branches. SvnToGit creates real
-git tags instead.
+git-svn maps Subversion tags to git branches. SvnToGit::Converter
+creates real git tags instead.
 
 =item *
 
 git-svn will map trunk in your Subversion repo to an explicit branch,
 and sometimes this is not the same as what ends up being master.
-SvnToGit ensures that trunk maps correctly to master.
+SvnToGit::Converter ensures that trunk maps correctly to master.
 
 =back
 
-Additionally, SvnToGit can handle the case in which the SVN repo
-you're converting did not start out as having a conventional
+Additionally, SvnToGit::Converter can handle the case in which the SVN
+repo you're converting did not start out as having a conventional
 trunk/branches/tags structure, but was moved over at a specific
 revision in the history. Read L</"Converting a repo with an
 inconsistent structure"> below for more information.
 
 =head1 USAGE
 
-If you want to quickly get started with SvnToGit, here are a few use cases:
+If you want to quickly get started with SvnToGit::Converter, here are
+a few use cases:
 
 =head2 Converting a repo with a trunk/branches/tags structure
 
 You don't have to do anything; this happens by default.
 
-  SvnToGit->convert(
+  SvnToGit::Converter->convert(
     svn_repo => "svn://your/svn/repo",
     git_repo => "/path/to/new/git/repo"
   );
@@ -85,7 +88,7 @@ You don't have to do anything; this happens by default.
 Use the C<revisions> option. For instance, if you want the git repo
 to contain only revisions 3-32 of the SVN repo:
 
-  SvnToGit->convert(
+  SvnToGit::Converter->convert(
     svn_repo => "svn://your/svn/repo",
     git_repo => "/path/to/new/git/repo"
     revisions => "3:32"
@@ -95,7 +98,7 @@ to contain only revisions 3-32 of the SVN repo:
 
 Use the C<root_is_trunk> option.
 
-  SvnToGit->convert(
+  SvnToGit::Converter->convert(
     svn_repo => "svn://your/svn/repo",
     git_repo => "/path/to/new/git/repo"
     root_is_trunk => 1
@@ -112,16 +115,16 @@ a branch. Unfortunately, if you were to convert such a project with
 git-svn, you would lose some history as the repository you'd end up
 with would stop at the point where trunk first came into existence.
 
-This is where SvnToGit can help you. The way SvnToGit converts such a
-repository is that the portion of the history up to the revision in
-which trunk was introduced is copied to one repository, and everything
-onward is copied as a second repository. Then, the two repositories
-are stitched together in the end.
+This is where SvnToGit::Converter can help you. The way SvnToGit
+converts such a repository is that the portion of the history up to
+the revision in which trunk was introduced is copied to one
+repository, and everything onward is copied as a second repository.
+Then, the two repositories are stitched together in the end.
 
 So, simply use the C<trunk_begins_at> option to tell the converter
 where trunk was introduced:
 
-  SvnToGit->convert(
+  SvnToGit::Converter->convert(
     svn_repo => "svn://your/svn/repo",
     git_repo => "/path/to/new/git/repo",
     trunk_begins_at => 5,
@@ -132,7 +135,7 @@ and you wish to remove some revisions from the final repository,
 you can specify the C<root_is_trunk_until> option to specify an
 endpoint for the first repository:
 
-  SvnToGit->convert(
+  SvnToGit::Converter->convert(
     svn_repo => "svn://your/svn/repo",
     git_repo => "/path/to/new/git/repo",
     root_is_trunk_until => 30
@@ -141,16 +144,12 @@ endpoint for the first repository:
 
 =head1 OPTIONS
 
-SvnToGit takes all the options that its command-line counterpart,
-L<svn2git>, takes. So read that for all the gory details.
-
-=cut
-
-our $DEFAULT_AUTHORS_FILE = "$ENV{HOME}/.svn2git/authors";
+SvnToGit::Converter takes all the options that its command-line
+counterpart, L<svn2git>, takes. So read that for all the gory details.
 
 =head1 METHODS
 
-=head2 SvnToGit-E<gt>convert(%args)
+=head2 SvnToGit::Converter-E<gt>convert(%args)
 
 Easy way to convert a repo all in one go. Simply passes the given
 options to L<.new>, so read that for more.
@@ -164,9 +163,13 @@ sub convert {
   return $c;
 }
 
-=head2 SvnToGit-E<gt>new(%args)
+=head2 SvnToGit::Converter-E<gt>new(%args)
 
-Creates a new converter object.
+Base method to create a new converter object.
+
+L<SvnToGit::StandardLayoutConverter> and
+L<SvnToGit::InconsistentLayoutConverter> extend this method, so see
+them for more.
 
 Receives the following options:
 
@@ -239,237 +242,60 @@ command generates.
 =cut
 
 sub new {
-  my($class, %args) = @_;
+  my($class, %data) = @_;
   
-  my $self = \%args;
-  bless($self, $class);
-  
-  if (!$self->{svn_repo}) {
-    $self->bail("You must pass an svn_repo option!");
-  }
-  unless ($self->{git_repo}) {
-    $self->{git_repo} = basename($self->{svn_repo});
-    if (-e $self->{git_repo} && !$self->{force}) {
-      $self->{git_repo} .= ".git";
-    }
-  }
-  $self->{revision} = $self->{revisions} if $self->{revisions};
-  $self->{clone} = 1 unless exists $self->{clone};
-  if (-f $DEFAULT_AUTHORS_FILE && !$self->{authors_file}) {
-    $self->{authors_file} = $DEFAULT_AUTHORS_FILE;
-  }
-  if ($self->{authors_file} && ! -f $self->{authors_file}) {
-    $self->bail("The authors file you specified doesn't exist!")
-  }
-  # TEST ME
-  for (qw(trunk branches tags)) {
-    if ($self->{$_}) {
-      $self->{$_} =~ s{/$}{};
-    }
-  }
-  # TEST ME
-  if ($self->{strip_tag_prefix}) {
-    $self->{strip_tag_prefix} =~ s{/$}{};
-  }
-  
-  return $self;
+  my $subclass = "SvnToGit::" . ($data{trunk_begins_at} ? 'InconsistentLayoutConverter' : 'ConsistentLayoutConverter');
+  #eval "require $klass";
+  $subclass->new(%data);
 }
 
-=head2 $converter-E<gt>run
-
-If converting a normal repo (either no structure or some structure),
-the conversion process looks like this:
-
-=over 4
-
-=item *
-
-Use git-svn to clone the SVN repo (unless C<clone> was set to false)
-
-=item *
-
-Go through branches in the new git repo, creating proper tags from
-branches that look like tags and checking out every other branch as
-a local branch
-
-=item *
-
-Map trunk to master
-
-=item *
-
-Perform optimizations on the final repo to reduce file size
-
-=back
-
-If converting a repo with an inconsistent structure, the process is a
-bit more involved:
-
-=over 4
-
-=item *
-
-Use git-svn to clone the two parts of the SVN repo separately such
-there are two repos (note that the C<clone> option here has no effect
-since it's kind of pointless)
-
-=item *
-
-Use C<git fetch> to copy commits (including branches and tags) from
-the second repo to the first repo
-
-=item *
-
-Re-check out remote branches as local branches in the first repo
-
-=item *
-
-Graft the second repo onto the end of the first repo
-
-=item *
-
-Fix master so it points to the end of the second repo instead of the
-first
-
-=item *
-
-Perform optimizations on the final repo to reduce file size
-
-=back
-
-=cut
+# Not documented.
+# This is used by ->new and ConsistentLayoutConverter->new,
+# so use that instead.
+#
+sub buildargs {
+  my($class, %data) = @_;
+  
+  if (!$data{svn_repo}) {
+    $class->bail("You must pass an svn_repo option!");
+  }
+  unless ($data{git_repo}) {
+    $data{git_repo} = basename($data{svn_repo});
+    if (-e $data{git_repo} && !$data{force}) {
+      $data{git_repo} .= ".git";
+    }
+  }
+  $data{git_repo} = rel2abs($data{git_repo});
+  
+  $data{verbosity_level} //= 1;
+  
+  return %data;
+}
 
 sub run {
   my $self = shift;
-  
-  $self->ensure_git_present();
-
-  if ($self->{clone}) {
-    $self->clone($self->{svn_repo}, $self->{git_repo});
-  } else {
-    $self->info("Since you requested not to clone, I'm assuming that you're already in the git repo.");
-  }
-  
-  $self->cache_branches_and_tags();
-  $self->fix_branches();
-  $self->fix_tags();
-  $self->fix_trunk();
-  $self->optimize_repo();
-  chdir ".." if $self->{clone};
-  
-  #print "\n----------\n";
-  #print "Conversion done!";
-  #print " Check out $self->{git_repo}." if $self->{clone};
-  #print "\n";
+  $self->bail("Must be implemented");
 }
 
-sub clone {
-  my $self = shift;
+sub create_git_repo_from_svn_repo {
+  my($self, %args) = @_;
   
-  $self->ensure_git_svn_present();
-  
-  if ($self->{force}) {
-    $self->cmd(qw(rm -rf), $self->{git_repo});
-  }
-  mkdir $self->{git_repo};
-  chdir $self->{git_repo};
-
-  $self->info("Cloning SVN repo at $self->{svn_repo} into $self->{git_repo}...");
-
-  my @clone_opts;
-  if ($self->{root_is_trunk}) {
-    push @clone_opts, "--trunk=".$self->{svn_repo};
-  } else {
-    for my $opt (qw(trunk branches tags)) {
-      push @clone_opts, "--$opt=$self->{$opt}" if $self->{$opt};
-    }
-    push @clone_opts, "--stdlayout" unless @clone_opts;
-  }
-  $self->git_svn(qw(init --no-metadata), @clone_opts, $self->{svn_repo});
-  
-  $self->git(qw(config svn.authorsfile), $self->{authors}) if $self->{authors};
-  
-  my @fetch_opts;
-  push @fetch_opts, "-r", $self->{revision} if $self->{revision};
-  $self->git_svn(qw(fetch), @fetch_opts);
-}
-
-sub cache_branches_and_tags {
-  my $self = shift;
-  
-  # Get the list of local and remote branches, taking care to ignore console color codes and ignoring the
-  # '*' character used to indicate the currently selected branch.
-  my @locals = map { s/^\*?\s+//; $_ } split("\n", `git branch -l --no-color`);
-  my @remotes = map { s/^\*?\s+//; $_ } split("\n", `git branch -r --no-color`);
-  
-  $self->{local_branches} = \@locals;
-  
-  $self->{remote_branches} = [];
-  $self->{remote_tags} = [];
-  for (@remotes) {
-    # Tags are remote branches that (by default) start with "tags/".
-    my $tags_path = $self->tags_path;
-    my $var = m{^$tags_path/} ? "remote_tags" : "remote_branches";
-    push @{$self->{$var}}, $_;
-  }
-  
-  #print Dumper($self->tags_path, $self->{remote_branches}, $self->{remote_tags});
-  #exit;
-}
-
-sub fix_branches {
-  my $self = shift;
-  
-  $self->info("Checking out remote branches as local branches...");
-
-  for my $branch (@{$self->{remote_branches}}) {
-    next if $branch eq $self->trunk_path;
-    $self->git(qw(branch -t), $branch, "remotes/$branch");
-    $self->git(qw(checkout), $branch);
-  }
-}
-
-sub fix_tags {
-  my $self = shift;
-  
-  $self->info("Turning svn tags cloned as branches into real git tags...");
-
-  my $tags_path = $self->tags_path;
-  for my $tag_branch (@{$self->{remote_tags}}) {
-    (my $tag = $tag_branch) =~ s{^$tags_path/}{};
-    my $newtag = $tag;
-
-    if (my $prefix = $self->{strip_tag_prefix}) {
-      $newtag =~ s{^$prefix/}{};
-    }
-    
-    my $subject = $self->strip(`git log -l --pretty=format:'\%s' "$tag_branch"`);
-    my $date = $self->strip(`git log -l --pretty=format:'\%ci' "$tag_branch"`);
-    #$self->git(qw(checkout), $tag_branch);
-    $self->git(qw(tag -a -m), $subject, $newtag, $tag_branch, {env => {GIT_COMMITTER_DATE => $date}});
-    $self->git(qw(branch -d -r), $tag_branch);
-  }
-}
-
-sub fix_trunk {
-  my $self = shift;
-  
-  return unless grep { $_ eq $self->trunk_path } @{$self->{remote_branches}};
-
-  $self->info("Making sure master is trunk...");
-
-  $self->git(qw(checkout), $self->trunk_path);
-  $self->git(qw(branch -D master));
-  $self->git(qw(checkout -f -b master));
-  $self->git(qw(branch -d -r), $self->trunk_path);
+  my @keys = qw(svn_repo git_repo root_is_trunk trunk branches tags authors revision);
+  $args{$_} //= $self->{$_} for @keys;
 }
 
 sub optimize_repo {
   my $self = shift;
   $self->git("gc");
+  $self->git("repack", "-a", "-d", "-f", "--depth", "50", "--window", "50");
 }
 
 #---
+
+sub default_authors_file {
+  shift;
+  "$ENV{HOME}/.svn2git/authors";
+}
 
 sub ensure_git_present {
   my $class = shift;
@@ -498,6 +324,48 @@ sub tags_path {
   $self->{tags} || 'tags';
 }
 
+sub get_branches_and_tags {
+  my($self, $dir) = @_;
+  
+  my $oldcwd = $self->chdir($dir) if $dir;
+  
+  # Get the list of local and remote branches, taking care to ignore console color codes and ignoring the
+  # '*' character used to indicate the currently selected branch.
+  my @locals = map { s/^\*?\s+//; $_ } split("\n", `git branch -l --no-color`);
+  my @remotes = map { s/^\*?\s+//; $_ } split("\n", `git branch -r --no-color`);
+  
+  my $local_branches = \@locals;
+  # <-- TODO: local tags?
+  
+  my $remote_branches = [];
+  my $remote_tags = [];
+  for (@remotes) {
+    # Tags are remote branches that (by default) start with "tags/".
+    my $tags_path = $self->tags_path;
+    my $branches = m{^$tags_path/} ? $remote_tags : $remote_branches;
+    push @$branches, $_;
+  }
+  
+  $self->chdir($oldcwd) if $dir;
+  
+  return {
+    local_branches => $local_branches,
+    remote_branches => $remote_branches,
+    remote_tags => $remote_tags
+  };
+}
+
+#---
+
+sub chdir {
+  my($self, $dir) = @_;
+  my $oldcwd = getcwd();
+  chdir $dir or die "Couldn't chdir: $!";
+  my $cwd = getcwd();
+  $self->debug("Current directory: $cwd");
+  $oldcwd;
+}
+
 sub cmd {
   my($self, @cmd) = @_;
   
@@ -520,8 +388,8 @@ sub cmd {
   }
   
   if ($self->{verbosity_level} >= 2) {
-    say colored(join(" ", map { /[ ]/ ? $tdd->dump($_) : $_ } @cmd), "yellow");
-    say colored("   with env vars: ".$tdd->dump($opts->{env}), "yellow");
+    my @env = map { join "=", $_, $tdd->dump($opts->{env}->{$_}) } keys %{$opts->{env}};
+    say colored(join(" ", @env, map { /[ ]/ ? $tdd->dump($_) : $_ } @cmd), "yellow");
   }
   
   # Stolen from Git::Wrapper
@@ -587,12 +455,17 @@ sub git_svn {
 
 sub header {
   my($self, $msg) = @_;
-  print colored("\n##### $msg #####\n\n", "cyan");
+  print "\n" . colored("##### $msg #####", "bold magenta") . "\n\n" if $self->{verbosity_level} > 0;
 }
 
 sub info {
   my($self, $msg) = @_;
-  print colored("$msg\n", "green") if $self->{verbosity_level} > 0;
+  say colored($msg, "green") if $self->{verbosity_level} > 0;
+}
+
+sub debug {
+  my($self, $msg) = @_;
+  say colored($msg, "bold black") if $self->{verbosity_level} >= 3;
 }
 
 sub strip {
@@ -604,7 +477,7 @@ sub strip {
 
 sub bail {
   my ($self, @args) = @_;
-  die "SvnToGit: @args\n";
+  die "SvnToGit::Converter: @args\n";
 }
 
 1;
@@ -654,5 +527,29 @@ specific revision in the history.
 =item *
 
 Added --force option
+
+=head1 AUTHOR
+
+Elliot Winkler <elliot.winkler@gmail.com>
+
+Greatly adapted from code by Michael G Schwern <schwern@pobox.com>
+
+=head1 SEE ALSO
+
+=over 4
+
+=item *
+
+L<git-svn>
+
+=item *
+
+Michael Schwern's Perl script: L<http://github.com/schwern/svn2git>
+
+=item *
+
+Current fork of Ruby svn2git: L<http://github.com/nirvdrum/svn2git>
+
+=back
 
 =cut

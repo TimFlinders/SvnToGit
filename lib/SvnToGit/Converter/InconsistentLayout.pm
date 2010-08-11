@@ -92,21 +92,15 @@ sub run {
   
   $self->ensure_git_present();
 
-  if ($self->{clear_cache} || !(-e $self->{cached_pre_repo_path} && -e $self->{cached_post_repo_path})) {
-    $self->clone_halves();
-  } else {
-    $self->info("Not cloning halves since we've already done that.");
-  }
+  $self->clone_or_load_halves();
   
   $self->load_cached_repos();
-  
   $self->copy_commits_from_post_to_pre();
   #$self->transfer_remote_branches_to_local_branches(
   #  remote_branches => $self->{pre_repo}->{remote_branches}
   #);
   if ($self->{stop_at_grafting}) {
     print $self->graft_message if $self->{verbosity_level} > 0;
-    #exit;
     return;
   }
   $self->graft_pre_and_post();
@@ -120,33 +114,51 @@ sub run {
   print $self->final_message if $self->{verbosity_level} > 0;
 }
 
-sub clone_halves {
+sub clone_or_load_halves {
   my $self = shift;
   
-  $self->ensure_git_svn_present();
+  my $do_clone = ($self->{clear_cache} || !(-e $self->{cached_pre_repo_path} && -e $self->{cached_post_repo_path}));
   
-  $self->{pre_repo} = SvnToGit::Converter::ConsistentLayout->new(
+  unless ($do_clone) {
+    $self->info("Not cloning halves since we've already done that.");
+  }
+  
+  if ($do_clone) {
+    $self->header(sprintf('Cloning 1-%d of the SVN repo to create the first git repo...', $self->{end_root_only_at}));
+  }
+  my $pre = $self->{pre_repo} = SvnToGit::Converter::ConsistentLayout->new(
     svn_repo => $self->{svn_repo},
     git_repo => $self->{cached_pre_repo_path},
-    authors => $self->{authors_file},
+    authors_file => $self->{authors_file},
     root_only => 1,
     revision => join(":", 1, $self->{end_root_only_at}),
     force => 1,
     verbosity_level => $self->{verbosity_level}
   );
-  $self->{pre_repo}->clone();
-  $self->{pre_repo}->fix_branches_and_tags();
+  if ($do_clone) {
+    $pre->clone();
+    $pre->fix_branches_and_tags();
+  } else {
+    $pre->cache_branches_and_tags();
+  }
   
-  $self->{post_repo} = SvnToGit::Converter::ConsistentLayout->new(
+  if ($do_clone) {
+    $self->header(sprintf('Cloning %d-HEAD to create the second repo...', $self->{start_std_layout_at}));
+  }
+  my $post = $self->{post_repo} = SvnToGit::Converter::ConsistentLayout->new(
     svn_repo => $self->{svn_repo},
     git_repo => $self->{cached_post_repo_path},
-    authors => $self->{authors_file},
+    authors_file => $self->{authors_file},
     revision => join(":", $self->{start_std_layout_at}, "HEAD"),
     force => 1,
     verbosity_level => $self->{verbosity_level}
   );
-  $self->{post_repo}->clone();
-  $self->{post_repo}->fix_branches_and_tags();
+  if ($do_clone) {
+    $post->clone();
+    $post->fix_branches_and_tags();
+  } else {
+    $post->cache_branches_and_tags();
+  }
 }
 
 sub load_cached_repos {
@@ -167,7 +179,7 @@ sub cache_branches_and_tags {
 sub copy_commits_from_post_to_pre {
   my $self = shift;
   
-  $self->header("Copying commits from post repo to pre");
+  $self->header("Copying commits from the second repo to the first...");
   
   $self->chdir($self->{pre_repo_path});
   
@@ -189,7 +201,7 @@ sub move_remote_branches_to_local_branches {
   
   # We've got the remote branches copied over, but we still have to get them locally
   
-  $self->header("Moving remote branches to local ones");
+  $self->header("Moving remote branches to local ones...");
   
   for my $remote (@{$self->{final_remote_branches}}) {
     (my $local = $remote) =~ s{origin/}{};
@@ -207,7 +219,7 @@ sub move_remote_branches_to_local_branches {
 sub graft_pre_and_post {
   my $self = shift;
   
-  $self->header("Grafting pre and post repos");
+  $self->header("Grafting the two halves together...");
   
   $self->cmd("cp", $self->{grafts_file}, ".git/info/grafts");
   $self->git("checkout", "master");
@@ -230,7 +242,8 @@ sub relocate_master {
   # Remember when we saved post's master branch?
   # Here's where we save it as the new master.
   
-  $self->header("Relocating master");
+  $self->header("Relocating master...");
+  
   $self->git("checkout", "post-master");
   $self->git("branch", "-D", "master");
   $self->git("checkout", "-b", "master");
@@ -244,17 +257,22 @@ sub graft_message {
   <<EOT;
   
 ----
-Okay! The first and second half of the SVN repo have been converted,
-but you still need to graft them together.
+Wait, you're not done yet!
+
+At this point, what we've done is split up the SVN repo into two git
+repos. Now you just need to graft them together.
 
 Next steps:
 
-1. Take a look at /tmp/git.pre and /tmp/git.post to find the commit ids
-   where the first half ends and the second half starts.
+1. The last step we did above was actually consolidate the two
+   half-repos into one repo, which is stored (for right now) at
+   /tmp/git.pre. You'll want to take a look at that in something like
+   GitX to find two commit ids, one where the first half ends, the
+   other where the second half starts.
    
-2. Take those commit ids and put them into a grafts file.
-   You can read more about grafting here[1], but here's what it needs
-   to contain:
+2. Once you have those commit ids, put them into a grafts file. You
+   can read more about grafting here[1], but here's all it needs to
+   contain:
 
      <start of post-repo id> <end of pre-repo id>
    
@@ -264,9 +282,8 @@ Next steps:
      AAAAB BBBBB
 
    You can test the grafts file you just made by creating
-   .git/info/grafts in /tmp/git.pre and then loading the repo in
-   something like GitX. Be sure to remove the file after you're done,
-   though!
+   .git/info/grafts in /tmp/git.pre. If you're in GitX, just press
+   Command-R to refresh the view.
   
 3. Finally, tell this script you're ready to start grafting by
    supplying the --grafts-file option.
@@ -278,29 +295,45 @@ EOT
 
 sub final_message {
   my $self = shift;
-  my $project_name = basename($self->{svn_repo});
+  my $git_folder = my $project_name = basename($self->{git_repo});
+  $git_folder .= ".git" unless $git_folder =~ m{\.git$};
   <<EOT
   
 ----
-Conversion complete! Now ssh into your server and run something like this:
+Hey, looks like you made it! You can take a look at your brand-spanking
+new git repo at:
 
+  $self->{git_repo}
+
+But you want to get it on your server so other people can use it, right?
+So, ssh into your server and try running:
+
+  adduser git
+  # ....
   su git
   cd /path/to/git/repos
-  mkdir $project_name
-  cd $project_name
+  mkdir $git_folder
+  cd $git_folder
   git init --bare
   git config core.sharedrepository 1
   chmod -R o-rwx .
   chmod -R g=u .
   find . -type d | xargs chmod g+s
 
-Next, navigate to your local repo and tell Git about the remote repo:
+Next, log out, navigate to your local repo and tell Git about the
+remote repo:
 
-  git remote add origin YOUR_GIT_URL
+  git remote add origin ssh://you\@yourserver.com/path/to/git/repos/$git_folder
 
-Finally, when you're ready, you can upload it to your server:
+When you're ready, upload it to your server:
 
   git push origin --all
+  
+Now for the moment of truth! Let's see if you can clone it:
+
+  git clone ssh://you\@yourserver.com/path/to/git/repos/$git_folder
+  
+If everything looks good, congratulations! Go and play some Wii, or something.
   
 EOT
 }

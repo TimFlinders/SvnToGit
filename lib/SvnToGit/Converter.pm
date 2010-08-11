@@ -21,6 +21,7 @@ SvnToGit::Converter - Convert a Subversion repository to Git
 use Modern::Perl;
 use File::Basename;
 use File::Spec::Functions qw(rel2abs file_name_is_absolute);
+use File::pushd;
 use Cwd;
 use Term::ANSIColor;
 use IPC::Open3 () ;
@@ -266,16 +267,16 @@ sub buildargs {
       $data{git_repo} .= ".git";
     }
   }
-  $data{git_repo} = rel2abs($data{git_repo});# unless file_name_is_absolute($data{git_repo});
+  $data{git_repo} = rel2abs($data{git_repo});
   
   if ($data{svn_repo} !~ m{\w+://}) {
-    $data{svn_repo} = rel2abs($data{svn_repo});# unless file_name_is_absolute($data{svn_repo});
+    $data{svn_repo} = rel2abs($data{svn_repo});
     $data{svn_repo} = "file://" . $data{svn_repo};
   }
   
   if ($data{authors_file}) {
     if (-f $data{authors_file}) {
-      $data{authors_file} = rel2abs($data{authors_file});# unless file_name_is_absolute($data{authors_file});
+      $data{authors_file} = rel2abs($data{authors_file});
     } else {
       $class->bail("The authors file you specified doesn't exist!")
     }
@@ -343,7 +344,8 @@ sub tags_path {
 sub get_branches_and_tags {
   my($self, $dir) = @_;
   
-  my $oldcwd = $self->chdir($dir) if $dir;
+  $dir ||= $self->{git_repo};
+  my $dirh = pushd($dir); # temporarily chdir into this dir
   
   # Get the list of local and remote branches, taking care to ignore console color codes and ignoring the
   # '*' character used to indicate the currently selected branch.
@@ -361,8 +363,6 @@ sub get_branches_and_tags {
     my $branches = m{^$tags_path/} ? $remote_tags : $remote_branches;
     push @$branches, $_;
   }
-  
-  $self->chdir($oldcwd) if $dir;
   
   return {
     local_branches => $local_branches,
@@ -471,7 +471,7 @@ sub git_svn {
 
 sub header {
   my($self, $msg) = @_;
-  print "\n" . colored("##### $msg #####", "bold magenta") . "\n\n" if $self->{verbosity_level} > 0;
+  say "\n" . colored($msg, "bold magenta") if $self->{verbosity_level} > 0;
 }
 
 sub info {

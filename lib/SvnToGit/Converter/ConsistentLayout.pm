@@ -134,7 +134,7 @@ sub clone {
   mkdir $self->{git_repo};
   chdir $self->{git_repo};
 
-  $self->info("Cloning SVN repo at $self->{svn_repo} into $self->{git_repo}...");
+  $self->info("Cloning SVN repo via git-svn...");
 
   my @clone_opts;
   if ($self->{root_only}) {

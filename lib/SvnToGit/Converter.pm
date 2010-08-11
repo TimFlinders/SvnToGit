@@ -20,7 +20,7 @@ SvnToGit::Converter - Convert a Subversion repository to Git
 
 use Modern::Perl;
 use File::Basename;
-use File::Spec::Functions qw(rel2abs);
+use File::Spec::Functions qw(rel2abs file_name_is_absolute);
 use Cwd;
 use Term::ANSIColor;
 use IPC::Open3 () ;
@@ -157,8 +157,8 @@ options to L<.new>, so read that for more.
 =cut
 
 sub convert {
-  my($class, %args) = @_;
-  my $c = $class->get_converter(%args);
+  my($class, %data) = @_;
+  my $c = $class->get_converter(%data);
   $c->run;
   return $c;
 }
@@ -180,14 +180,14 @@ Receives the following options:
 These tell the converter about the layout of your repository -- what
 subdirectories contain the trunk, branches, and tags, respectively.
 
-If none of these are specified, a standard Subversion layout is
-assumed.
+If none of these are specified, a standard trunk/branches/tags layout
+is assumed.
 
 =item B<root-only =E<gt> I<Boolean>>
 
-This tells the converter that trunk is at 'trunk', and not to worry
-about the branches or tags (except for converting trunk to the master
-branch).
+This tells the converter that you never had a conventional
+trunk/branches/tags layout in your repository, and you just want
+whatever's in the root folder to show up as the master branch.
 
 =item B<clone =E<gt> I<Boolean>>
 
@@ -266,13 +266,21 @@ sub buildargs {
       $data{git_repo} .= ".git";
     }
   }
-  $data{git_repo} = rel2abs($data{git_repo});
+  $data{git_repo} = rel2abs($data{git_repo});# unless file_name_is_absolute($data{git_repo});
   
-  if (-f $class->default_authors_file && !$data{authors_file}) {
-    $data{authors_file} = $class->default_authors_file;
+  if ($data{svn_repo} !~ m{\w+://}) {
+    $data{svn_repo} = rel2abs($data{svn_repo});# unless file_name_is_absolute($data{svn_repo});
+    $data{svn_repo} = "file://" . $data{svn_repo};
   }
-  if ($data{authors_file} && ! -f $data{authors_file}) {
-    $class->bail("The authors file you specified doesn't exist!")
+  
+  if ($data{authors_file}) {
+    if (-f $data{authors_file}) {
+      $data{authors_file} = rel2abs($data{authors_file});# unless file_name_is_absolute($data{authors_file});
+    } else {
+      $class->bail("The authors file you specified doesn't exist!")
+    }
+  } elsif (-f $class->default_authors_file) {
+    $data{authors_file} = $class->default_authors_file;
   }
   
   $data{verbosity_level} //= 1;

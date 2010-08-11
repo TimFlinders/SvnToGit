@@ -128,7 +128,7 @@ sub clone_halves {
   $self->{pre_repo} = SvnToGit::Converter::ConsistentLayout->new(
     svn_repo => $self->{svn_repo},
     git_repo => $self->{cached_pre_repo_path},
-    authors => $self->{authors},
+    authors => $self->{authors_file},
     root_only => 1,
     revision => join(":", 1, $self->{end_root_only_at}),
     force => 1,
@@ -140,7 +140,7 @@ sub clone_halves {
   $self->{post_repo} = SvnToGit::Converter::ConsistentLayout->new(
     svn_repo => $self->{svn_repo},
     git_repo => $self->{cached_post_repo_path},
-    authors => $self->{authors},
+    authors => $self->{authors_file},
     revision => join(":", $self->{start_std_layout_at}, "HEAD"),
     force => 1,
     verbosity_level => $self->{verbosity_level}

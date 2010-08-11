@@ -147,7 +147,7 @@ sub clone {
   }
   $self->git_svn("init", "--no-metadata", @clone_opts, $self->{svn_repo});
   
-  $self->git("config", "svn.authorsfile", $self->{authors}) if $self->{authors};
+  $self->git("config", "svn.authorsfile", $self->{authors_file}) if $self->{authors_file};
   
   my @fetch_opts;
   push @fetch_opts, "-r", $self->{revision} if $self->{revision};

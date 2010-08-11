@@ -22,16 +22,13 @@ use Modern::Perl;
 use File::Basename;
 use File::Spec::Functions qw(rel2abs file_name_is_absolute);
 use File::pushd;
-use Cwd;
 use Term::ANSIColor;
-use IPC::Open3 () ;
-use Symbol;
 use Data::Dumper::Again;
 use Data::Dumper::Simple;
 my $dd = Data::Dumper::Again->new(deepcopy => 1, quotekeys => 1);
 my $tdd = Data::Dumper::Again->new(deepcopy => 1, quotekeys => 1, terse => 1, indent => 0);
 
-#use lib dirname(__FILE__) . "/..";
+use parent 'SvnToGit::Cli';
 
 use SvnToGit::Converter::ConsistentLayout;
 use SvnToGit::Converter::InconsistentLayout;
@@ -294,6 +291,8 @@ sub run {
   $self->bail("Must be implemented");
 }
 
+#---
+
 sub create_git_repo_from_svn_repo {
   my($self, %args) = @_;
   
@@ -341,6 +340,12 @@ sub tags_path {
   $self->{tags} || 'tags';
 }
 
+sub git_svn {
+  my($self, $subcommand, @args) = @_;
+  my @cmd = ("git", "svn", $subcommand, @args);
+  $self->cmd(@cmd);
+}
+
 sub get_branches_and_tags {
   my($self, $dir) = @_;
   
@@ -369,131 +374,6 @@ sub get_branches_and_tags {
     remote_branches => $remote_branches,
     remote_tags => $remote_tags
   };
-}
-
-#---
-
-sub chdir {
-  my($self, $dir) = @_;
-  my $oldcwd = getcwd();
-  chdir $dir or die "Couldn't chdir: $!";
-  my $cwd = getcwd();
-  $self->debug("Current directory: $cwd");
-  $oldcwd;
-}
-
-sub cmd {
-  my($self, @cmd) = @_;
-  
-  my $opts = (ref $cmd[-1] eq "HASH") ? pop @cmd : {};
-  my %OLDENV = ();
-  
-  #if (ref $cmd[-1] eq "HASH") {
-  #  my $env = pop @cmd;
-  #  my @tmp = ();
-  #  while (my($k,$v) = each %$env) {
-  #    push @tmp, "$k=\"$v\"";
-  #  }
-  #  my $pre = join(" ", @tmp);
-  #  $cmd[0] = $pre . " " . $cmd[0];
-  #}
-  
-  for my $k (keys %{$opts->{env}}) {
-    $OLDENV{$k} = $ENV{$k};
-    $ENV{$k} = $opts->{env}->{$k};
-  }
-  
-  if ($self->{verbosity_level} >= 2) {
-    my @env = map { join "=", $_, $tdd->dump($opts->{env}->{$_}) } keys %{$opts->{env}};
-    say colored(join(" ", @env, map { /[ ]/ ? $tdd->dump($_) : $_ } @cmd), "yellow");
-  }
-  
-  # Stolen from Git::Wrapper
-  my (@out, @err, $wtr, $rdr, $err);
-  $err = Symbol::gensym;
-  my $pid = IPC::Open3::open3($wtr, $rdr, $err, @cmd);
-  close $wtr;
-  while (defined(my $x = <$rdr>) | defined(my $y = <$err>)) {
-    if (defined $x) {
-      chomp $x;
-      say $x if $self->{verbosity_level} >= 3;
-      push @out, $x;
-    }
-    if (defined $y) {
-      chomp $y;
-      say $y if $self->{verbosity_level} >= 3;
-      push @err, $y;
-    }
-  }
-  waitpid $pid, 0;
-  
-  for my $k (keys %OLDENV) {
-    $ENV{$k} = $OLDENV{$k};
-  }
-
-  my $exit = $? >> 8;
-  die "@cmd exited with $exit" if $exit;
-
-  return @out;
-}
-
-sub git {
-  my($self, $subcommand, @args) = @_;
-  
-  #my $quiet_option = "";
-  #given ($subcommand) {
-  #  when("tag")  { $quiet_option = undef }
-  #  #when("fetch") { $quiet_option = "-q" }
-  #  default       { $quiet_option = "--quiet" }
-  #}
-  #unshift @args, $quiet_option if $quiet_option && $self->{verbosity_level} < 3;
-  
-  my @cmd = ("git", $subcommand, @args);
-  
-  $self->cmd(@cmd);
-}
-
-sub git_svn {
-  my($self, $subcommand, @args) = @_;
-  
-  #my $quiet_option = "";
-  #given ($subcommand) {
-  #  when("init")  { $quiet_option = undef }
-  #  when("fetch") { $quiet_option = "-q" }
-  #  default       { $quiet_option = "--quiet" }
-  #}
-  #unshift @args, $quiet_option if $quiet_option && $self->{verbosity_level} < 3;
-  
-  my @cmd = ("git", "svn", $subcommand, @args);
-  
-  $self->cmd(@cmd);
-}
-
-sub header {
-  my($self, $msg) = @_;
-  say "\n" . colored($msg, "bold magenta") if $self->{verbosity_level} > 0;
-}
-
-sub info {
-  my($self, $msg) = @_;
-  say colored($msg, "green") if $self->{verbosity_level} > 0;
-}
-
-sub debug {
-  my($self, $msg) = @_;
-  say colored($msg, "bold black") if $self->{verbosity_level} >= 3;
-}
-
-sub strip {
-  my($self, $str) = @_;
-  $str =~ s/^\s+//;
-  $str =~ s/\s+$//;
-  return $str;
-}
-
-sub bail {
-  my ($self, @args) = @_;
-  die "SvnToGit::Converter: @args\n";
 }
 
 1;

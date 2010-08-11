@@ -115,7 +115,7 @@ sub test_trunk_is_converted : Tests {
 
 sub test_revision_option : Tests {
   my $test = shift;
-  $test->{converter}->{revision} = "1:7";
+  $test->{converter}->{revisions} = "1:7";
   $test->{converter}->run;
   chdir "$fixture_dir/repo.git";
   my $first_commit = (split("\n", qx'git log --all --format=%s'))[0];

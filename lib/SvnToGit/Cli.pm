@@ -18,11 +18,12 @@ package SvnToGit::Cli;
 
 use Modern::Perl;
 use Getopt::Long qw(GetOptionsFromArray);
+Getopt::Long::Configure("no_auto_abbrev");
 use Pod::Usage;
 use Pod::Find qw(pod_where);
 use Term::ANSIColor;
 use Cwd;
-use IPC::Open3 () ;
+use IPC::Open3::Utils;
 use Symbol;
 use File::Basename;
 use Data::Dumper::Again;
@@ -145,7 +146,7 @@ EOT
       # provide an option for this?
       $self->cmd("rm", "-rf", $local_svn_repo)
     }
-    $self->cmd("svnadmin", "create", $local_svn_repo);
+    $self->cmd("svnadmin", "create", "--pre-1.4-compatible", $local_svn_repo);
     $self->command("echo '#!/bin/sh' >> $local_svn_repo/hooks/pre-revprop-change");
     $self->command("chmod 0755 $local_svn_repo/hooks/pre-revprop-change");
     # http://journal.paul.querna.org/articles/2006/09/14/using-svnsync/
@@ -163,11 +164,11 @@ sub convert {
   my $self = shift;
   
   $self->getopts(
-    "trunk:s", "branches:s", "tags:s", "root-only",
-    "authors-file|A:s",
+    "trunk=s", "branches=s", "tags=s", "root-only",
+    "authors-file|A=s",
     "clone!",
-    "strip-tag-prefix:s",
-    "revision|r:s",
+    "strip-tag-prefix=s",
+    "revisions|r=s",
     "grafts-file=s",
     "end-root-only-at=i",
     "start-std-layout-at=i",
@@ -198,16 +199,6 @@ sub cmd {
   my $opts = (ref $cmd[-1] eq "HASH") ? pop @cmd : {};
   my %OLDENV = ();
   
-  #if (ref $cmd[-1] eq "HASH") {
-  #  my $env = pop @cmd;
-  #  my @tmp = ();
-  #  while (my($k,$v) = each %$env) {
-  #    push @tmp, "$k=\"$v\"";
-  #  }
-  #  my $pre = join(" ", @tmp);
-  #  $cmd[0] = $pre . " " . $cmd[0];
-  #}
-  
   for my $k (keys %{$opts->{env}}) {
     $OLDENV{$k} = $ENV{$k};
     $ENV{$k} = $opts->{env}->{$k};
@@ -218,33 +209,31 @@ sub cmd {
     $self->command( join(" ", @env, map { /[ ]/ ? $tdd->dump($_) : $_ } @cmd) );
   }
   
-  # Stolen from Git::Wrapper
-  my (@out, @err, $wtr, $rdr, $err);
-  $err = Symbol::gensym;
-  my $pid = IPC::Open3::open3($wtr, $rdr, $err, @cmd);
-  close $wtr;
-  while (defined(my $x = <$rdr>) | defined(my $y = <$err>)) {
-    if (defined $x) {
-      chomp $x;
-      say $x if $self->{verbosity_level} >= 3;
-      push @out, $x;
-    }
-    if (defined $y) {
-      chomp $y;
-      say $y if $self->{verbosity_level} >= 3;
-      push @err, $y;
-    }
+  my @out = ();
+  my $success = run_cmd(@cmd, {
+    handler => sub {
+      my ($line, $stdin, $is_stderr, $is_open3_err) = @_;
+      if ($is_stderr || $is_open3_err) {
+        print $line;
+      } else {
+        print $line if $self->{verbosity_level} >= 3;
+        push @out, $line;
+      }
+      return 1;
+    },
+    autoflush => {
+      stdout => 1,
+      stderr => 1
+    }#,
+    #close_stdin => 1
+  });
+  my $exit = $? >> 8;
+  if ($exit) {
+    die "@cmd exited with $exit";
   }
-  waitpid $pid, 0;
   
   for my $k (keys %OLDENV) {
     $ENV{$k} = $OLDENV{$k};
-  }
-
-  my $exit = $? >> 8;
-  if ($exit) {
-    say join("\n", @err);
-    die "@cmd exited with $exit";
   }
 
   return @out;
@@ -355,11 +344,9 @@ when you just want to convert the tags on a git repository you'd
 previously cloned using git-svn. Note that this assumes you're already
 in the git repo.
 
-=item B<--revision REV>, B<-r REV>
+=item B<--revisions REV1:REV2>, B<-r REV1:REV2>
 
-=item B<--revision REV1:REV2>, B<-r REV1:REV2>
-
-Specifies which revision(s) within the Subversion repo show up in the
+Specifies which revisions within the Subversion repo show up in the
 new git repo.
 
 =item B<--authors-file AUTHORS_FILE>

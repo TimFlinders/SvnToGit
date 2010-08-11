@@ -89,7 +89,7 @@ to contain only revisions 3-32 of the SVN repo:
   SvnToGit::Converter->convert(
     svn_repo => "svn://your/svn/repo",
     git_repo => "/path/to/new/git/repo"
-    revisions => "3:32"
+    revisions => [3, 32]
   );
 
 =head2 Converting a repo with no trunk/branches/tags structure
@@ -169,11 +169,11 @@ Receives the following options:
 
 =over 4
 
-=item B<trunk =E<gt> I<String>>
+=item B<trunk =E<gt> I<string>>
 
-=item B<branches =E<gt> I<String>>
+=item B<branches =E<gt> I<string>>
 
-=item B<tags =E<gt> I<String>>
+=item B<tags =E<gt> I<string>>
 
 These tell the converter about the layout of your repository -- what
 subdirectories contain the trunk, branches, and tags, respectively.
@@ -181,13 +181,13 @@ subdirectories contain the trunk, branches, and tags, respectively.
 If none of these are specified, a standard trunk/branches/tags layout
 is assumed.
 
-=item B<root-only =E<gt> I<Boolean>>
+=item B<root-only =E<gt> {0 | 1}>
 
 This tells the converter that you never had a conventional
 trunk/branches/tags layout in your repository, and you just want
 whatever's in the root folder to show up as the master branch.
 
-=item B<clone =E<gt> I<Boolean>>
+=item B<clone =E<gt> {0 | 1}>
 
 If false, skips the step of cloning the SVN repository. This is useful
 when you just want to convert the tags on a git repository you'd
@@ -196,28 +196,28 @@ in the git repo.
 
 True by default.
 
-=item B<revision =E<gt> I<String>>, B<revisions =E<gt> I<String>>
+=item B<revisions =E<gt> {I<number> | I<array>}>
 
 Specifies which revision(s) within the Subversion repo show up in the
 new git repo.
 
-=item B<authors_file =E<gt> I<String>>
+=item B<authors_file =E<gt> I<string>>
 
 The location of the authors file to use when mapping Subversion authors
 to git authors. See L<git-svn>'s C<-A> option for more on how this works.
 
-=item B<strip_tag_prefix =E<gt> I<String>>
+=item B<strip_tag_prefix =E<gt> I<string>>
 
 When converting tags, removes this string from each tag. For example,
 C<--strip-tag-prefix="release-"> would turn "release-1.2.3" into
 "1.2.3".
 
-=item B<force =E<gt> I<Boolean>>
+=item B<force =E<gt> {0 | 1}>
 
 If the directory where the new git repo will be created already
 exists, it will be overwritten.
 
-=item B<verbosity_level =E<gt> I<Integer>>
+=item B<verbosity_level =E<gt> I<number>>
 
 If set to 0, nothing is output.
 
@@ -279,6 +279,10 @@ sub buildargs {
     }
   } elsif (-f $class->default_authors_file) {
     $data{authors_file} = $class->default_authors_file;
+  }
+  
+  if ($data{revisions} && ! ref($data{revisions})) {
+    $data{revisions} = [split ":", $data{revisions}];
   }
   
   $data{verbosity_level} //= 1;

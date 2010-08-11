@@ -15,6 +15,24 @@ use parent 'Test::SvnToGit::Class';
 my $fixtures_dir = fast_abs_path(dirname(__FILE__) . "/../../../../fixtures");
 my $fixture_dir = "$fixtures_dir/repo";
 
+sub test_revision_option_is_alias_for_revisions : Tests {
+  my $test = shift;
+  my %data = SvnToGit::Converter::ConsistentLayout->buildargs(
+    svn_repo => "/path/to/repo",
+    revision => "1"
+  );
+  is $data{revisions}, "1", "aliases revisions option to revision";
+}
+
+sub test_revisions_converts_two_revisions_into_array : Tests {
+  my $test = shift;
+  my %data = SvnToGit::Converter::ConsistentLayout->buildargs(
+    svn_repo => "/path/to/repo",
+    revisions => "1:3"
+  );
+  is_deeply $data{revisions}, [1, 3], "converts a two-revision argument given to revisions option to an array";
+}
+
 sub test_bails_on_no_svn_repo_option : Tests {
   my $test = shift;
   throws_ok {

@@ -68,7 +68,7 @@ sub test_no_tags_exist : Tests {
 
 sub test_revision_option : Tests {
   my $test = shift;
-  $test->{converter}->{revision} = "1:3";
+  $test->{converter}->{revisions} = "1:3";
   $test->{converter}->run;
   chdir "$fixture_dir/repo.git";
   my $first_commit = (split("\n", qx'git log --all --format=%s'))[0];

@@ -68,4 +68,19 @@ sub test_stops_at_grafting_if_grafts_file_not_supplied : Tests {
   is $data{stop_at_grafting}, 1, "sets stop_at_grafting to 1 if grafts_file was not supplied";
 }
 
+=begin
+sub test_doesnt_stop_at_grafting_if_grafts_file_not_given_but_grafts_file_exists : Tests {
+  my $test = shift;
+  my $tmpdir = File::Spec->tmpdir;
+  $SvnToGit::Converter::InconsistentLayout::cached_pre_repo_path = $tmpdir;
+  `mkdir -p $tmpdir/.git/info`;
+  `touch $tmpdir/.git/info/grafts`;
+  my %data = SvnToGit::Converter::InconsistentLayout->buildargs(
+    svn_repo => "/path/to/repo",
+    start_std_layout_at => 1
+  );
+  isnt $data{stop_at_grafting}, 1, "doesn't stop at grafting if grafts_file wasn't given, but .git/info/grafts file exists in pre-repo";
+}
+=cut
+
 1;

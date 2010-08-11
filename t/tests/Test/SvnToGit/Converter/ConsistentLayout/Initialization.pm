@@ -17,15 +17,6 @@ sub startup : Tests(startup => 1) {
   use_ok 'SvnToGit::Converter::ConsistentLayout';
 }
 
-sub test_revisions_option : Tests {
-  my $test = shift;
-  my %data = SvnToGit::Converter::ConsistentLayout->buildargs(
-    svn_repo => "/path/to/repo",
-    revisions => "1:2"
-  );
-  is $data{revision}, "1:2", "aliases revisions option to revision";
-}
-
 sub test_clone_option_is_true_by_default : Tests {
   my $test = shift;
   my %data = SvnToGit::Converter::ConsistentLayout->buildargs(

@@ -27,7 +27,6 @@ sub buildargs {
   %data = $class->SUPER::buildargs(%data);
   
   $data{clone} = 1 unless exists $data{clone};
-  $data{revision} = $data{revisions} if $data{revisions};
   
   for (qw(trunk branches tags)) {
     if ($data{$_}) {
@@ -132,7 +131,7 @@ sub clone {
   }
   
   mkdir $self->{git_repo};
-  chdir $self->{git_repo};
+  $self->chdir($self->{git_repo});
 
   $self->info("Cloning SVN repo via git-svn...");
 
@@ -150,7 +149,9 @@ sub clone {
   $self->git("config", "svn.authorsfile", $self->{authors_file}) if $self->{authors_file};
   
   my @fetch_opts;
-  push @fetch_opts, "-r", $self->{revision} if $self->{revision};
+  if ($self->{revisions}) {
+    push @fetch_opts, "-r", join(":", @{$self->{revisions}});
+  }
   $self->git_svn("fetch", @fetch_opts);
 }
 

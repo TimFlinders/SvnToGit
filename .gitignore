@@ -2,3 +2,7 @@
 *.tmproj
 *.tmp
 t/fixtures/*
+
+# vim
+*.vim*
+tags

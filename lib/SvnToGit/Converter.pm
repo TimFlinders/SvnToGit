@@ -241,7 +241,7 @@ Otherwise, returns a Converter::ConsistentLayout.
 
 sub get_converter {
   my($class, %data) = @_;
-  
+
   my $subclass = 'SvnToGit::Converter::' . ($data{start_std_layout_at} ? 'InconsistentLayout' : 'ConsistentLayout');
   #eval "require $klass";
   $subclass->new(%data);
@@ -253,11 +253,11 @@ sub get_converter {
 #
 sub buildargs {
   my($class, %data) = @_;
-  
+
   if (!$data{svn_repo}) {
     $class->bail("You must pass an svn_repo option!");
   }
-  
+
   unless ($data{git_repo}) {
     $data{git_repo} = basename($data{svn_repo});
     if (-e $data{git_repo} && !$data{force}) {
@@ -265,12 +265,12 @@ sub buildargs {
     }
   }
   $data{git_repo} = rel2abs($data{git_repo});
-  
+
   if ($data{svn_repo} !~ m{\w+://}) {
     $data{svn_repo} = rel2abs($data{svn_repo});
     $data{svn_repo} = "file://" . $data{svn_repo};
   }
-  
+
   if ($data{authors_file}) {
     if (-f $data{authors_file}) {
       $data{authors_file} = rel2abs($data{authors_file});
@@ -280,13 +280,13 @@ sub buildargs {
   } elsif (-f $class->default_authors_file) {
     $data{authors_file} = $class->default_authors_file;
   }
-  
+
   if ($data{revisions} && ! ref($data{revisions})) {
     $data{revisions} = [split ":", $data{revisions}];
   }
-  
+
   $data{verbosity_level} //= 1;
-  
+
   return %data;
 }
 
@@ -299,13 +299,14 @@ sub run {
 
 sub create_git_repo_from_svn_repo {
   my($self, %args) = @_;
-  
+
   my @keys = qw(svn_repo git_repo root_is_trunk trunk branches tags authors revision);
   $args{$_} //= $self->{$_} for @keys;
 }
 
 sub optimize_repo {
   my $self = shift;
+  $self->info("Optimizing the repo...");
   $self->git("gc");
   $self->git("repack", "-a", "-d", "-f", "--depth", "50", "--window", "50");
 }
@@ -352,18 +353,18 @@ sub git_svn {
 
 sub get_branches_and_tags {
   my($self, $dir) = @_;
-  
+
   $dir ||= $self->{git_repo};
   my $dirh = pushd($dir); # temporarily chdir into this dir
-  
+
   # Get the list of local and remote branches, taking care to ignore console color codes and ignoring the
   # '*' character used to indicate the currently selected branch.
   my @locals = map { s/^\*?\s+//; $_ } split("\n", `git branch -l --no-color`);
   my @remotes = map { s/^\*?\s+//; $_ } split("\n", `git branch -r --no-color`);
-  
+
   my $local_branches = \@locals;
   # <-- TODO: local tags?
-  
+
   my $remote_branches = [];
   my $remote_tags = [];
   for (@remotes) {
@@ -372,7 +373,7 @@ sub get_branches_and_tags {
     my $branches = m{^$tags_path/} ? $remote_tags : $remote_branches;
     push @$branches, $_;
   }
-  
+
   return {
     local_branches => $local_branches,
     remote_branches => $remote_branches,

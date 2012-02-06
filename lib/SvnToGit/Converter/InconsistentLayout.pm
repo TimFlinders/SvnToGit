@@ -31,19 +31,19 @@ sub new {
 #
 sub buildargs {
   my($class, %data) = @_;
-  
+
   %data = $class->SUPER::buildargs(%data);
 
   $data{end_root_only_at} ||= $data{start_std_layout_at} - 1;
-  
+
   $data{final_git_url} ||= 'ssh://you@yourserver.com/path/to/git/repo';
-  
+
   if ($data{grafts_file}) {
     $data{grafts_file} = rel2abs($data{grafts_file}) unless file_name_is_absolute($data{grafts_file});
   } else {
     $data{stop_at_grafting} = 1;
   }
-  
+
   return %data;
 }
 
@@ -88,11 +88,11 @@ Perform optimizations on the final repo to reduce file size
 
 sub run {
   my $self = shift;
-  
+
   $self->ensure_git_present();
 
   $self->clone_or_load_halves();
-  
+
   $self->load_cached_repos();
   $self->copy_commits_from_post_to_pre();
   #$self->transfer_remote_branches_to_local_branches(
@@ -104,29 +104,29 @@ sub run {
   }
   $self->graft_pre_and_post();
   #$self->clone_pre();
-  
+
   $self->cache_branches_and_tags();
   $self->move_remote_branches_to_local_branches();
   $self->relocate_master();
   $self->optimize_repo();
-  
+
   print $self->final_message if $self->{verbosity_level} > 0;
-  
+
   #$self->cmd("rm", "-rf", $cached_pre_repo_path, $cached_post_repo_path, $pre_repo_path, $post_repo_path);
 }
 
 sub clone_or_load_halves {
   my $self = shift;
-  
+
   my $do_clone = ($self->{clear_cache} || !(-e $pre_repo_path && -e $post_repo_path));
-  
+
   unless ($do_clone) {
     $self->info("Not cloning halves since we've already done that.");
   }
-  
+
   my $start_rev = $self->{revisions}->[0] || 1;
   my $end_rev = $self->{revisions}->[1] || "HEAD";
-  
+
   if ($do_clone) {
     $self->header(sprintf('Cloning %s-%s of the SVN repo to create the first git repo...', $start_rev, $self->{end_root_only_at}));
   }
@@ -145,7 +145,7 @@ sub clone_or_load_halves {
   } else {
     $pre->cache_branches_and_tags();
   }
-  
+
   if ($do_clone) {
     $self->header(sprintf('Cloning %s-%s to create the second repo...', $self->{start_std_layout_at}, $end_rev));
   }
@@ -182,18 +182,18 @@ sub cache_branches_and_tags {
 
 sub copy_commits_from_post_to_pre {
   my $self = shift;
-  
+
   $self->header("Copying commits from the second repo to the first...");
-  
+
   $self->chdir($pre_repo_path);
-  
+
   # Transfer objects from the post repo to the pre repo.
   # (This no longer does anything by default in git 1.7 (for some reason),
   # so we have to tell it which branch to pull.)
   # Notice that we're putting post's master branch in a new branch.
   # This will come in handy later when we graft the two repos together at the end.
   $self->git("fetch", $post_repo_path, "master:post-master");  # XXX: Does this work if we say git fetch --tags?
-  
+
   # Transfer remote branches from post too
   for my $branch (@{$self->{post_repo}->{remote_branches}}) {
     $self->git("fetch", $post_repo_path, "refs/remotes/$branch:refs/remotes/$branch");
@@ -202,17 +202,17 @@ sub copy_commits_from_post_to_pre {
 
 sub move_remote_branches_to_local_branches {
   my $self = shift;
-  
+
   # We've got the remote branches copied over, but we still have to get them locally
-  
+
   $self->header("Moving remote branches to local ones...");
-  
+
   for my $remote (@{$self->{final_remote_branches}}) {
     (my $local = $remote) =~ s{origin/}{};
     unless ($local eq "master") {
       #if ($opts{move}) {
         $self->git("branch", "--no-track", $local, "refs/remotes/$remote");
-        $self->git("branch", "-r", "-D", $remote) 
+        $self->git("branch", "-r", "-D", $remote)
       #} else {
       #  $self->git("branch", "-t", $local, "refs/remotes/$remote");
       #}
@@ -222,15 +222,15 @@ sub move_remote_branches_to_local_branches {
 
 sub graft_pre_and_post {
   my $self = shift;
-  
+
   $self->header("Grafting the two halves together...");
-  
+
   $self->cmd("cp", $self->{grafts_file}, ".git/info/grafts");
   $self->git("checkout", "master");
   $self->git("filter-branch", "--tag-name-filter", "cat", "--", "--all");
   # Remove this or else it causes problems later
   unlink ".git/info/grafts";
-  
+
   #$self->chdir("..");
   $self->cmd("rm", "-rf", $self->{git_repo});
   #$self->git("clone", "file://".$pre_repo_path, $self->{git_repo});
@@ -242,12 +242,12 @@ sub graft_pre_and_post {
 
 sub relocate_master {
   my $self = shift;
-  
+
   # Remember when we saved post's master branch?
   # Here's where we save it as the new master.
-  
+
   $self->header("Relocating master...");
-  
+
   $self->git("checkout", "post-master");
   $self->git("branch", "-D", "master");
   $self->git("checkout", "-b", "master");
@@ -259,7 +259,7 @@ sub relocate_master {
 sub graft_message {
   my $self = shift;
   <<EOT;
-  
+
 ----
 Wait, you're not done yet!
 
@@ -273,22 +273,17 @@ Next steps:
    /tmp/git.pre. You'll want to take a look at that in something like
    GitX to find two commit ids, one where the first half ends, the
    other where the second half starts.
-   
+
 2. Once you have those commit ids, put them into a grafts file. You
    can read more about grafting here[1], but here's all it needs to
    contain:
 
-     <start of post-repo id> <end of pre-repo id>
-   
-   So, if the first commit id was AAAAA and the second was BBBBB,
-   you'd write:
-
-     AAAAB BBBBB
+     <first commit id of second half> <last commit id of first half>
 
    You can test the grafts file you just made by creating
    .git/info/grafts in /tmp/git.pre. If you're in GitX, just press
    Command-R to refresh the view.
-  
+
 3. Finally, tell this script you're ready to start grafting by
    supplying the --grafts-file option.
 
@@ -302,7 +297,7 @@ sub final_message {
   my $git_folder = my $project_name = basename($self->{git_repo});
   $git_folder .= ".git" unless $git_folder =~ m{\.git$};
   <<EOT
-  
+
 ----
 Hey, looks like you made it! You can take a look at your brand-spanking
 new git repo at:
@@ -332,12 +327,12 @@ remote repo:
 When you're ready, upload it to your server:
 
   git push origin --all
-  
+
 Now for the moment of truth! Let's see if you can clone it:
 
   git clone ssh://you\@yourserver.com/path/to/git/repos/$git_folder
-  
+
 If everything looks good, congratulations! Go and play some Wii, or something.
-  
+
 EOT
 }
